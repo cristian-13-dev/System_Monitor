@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { getMetrics } from "../controllers/metrics.controller.js";
+import { getSystemMetrics } from "../controllers/metrics.controller.js";
 
 const router = Router();
 
-router.get("/metrics", getMetrics);
+router.get("/metrics", getSystemMetrics);
 
 export default router;

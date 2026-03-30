@@ -1,17 +1,18 @@
 import si from 'systeminformation';
+import { formatToGb } from '../utils/formatToGb.js'
 
 export type MemoryMetrics = {
-  totalMemory: number;
-  freeMemory: number;
-  usedMemory: number;
+  totalMemorySize: number;
+  availableMemorySize: number;
+  usedMemorySize: number;
   usagePercentage: number | null;
   updatedAt: string
 }
 
 let memoryMetrics: MemoryMetrics = {
-  totalMemory: 0,
-  freeMemory: 0,
-  usedMemory: 0,
+  totalMemorySize: 0,
+  availableMemorySize: 0,
+  usedMemorySize: 0,
   usagePercentage: null,
   updatedAt: new Date().toISOString(),
 }
@@ -21,9 +22,9 @@ async function refreshMemoryMetrics(): Promise<void> {
     const {total: totalMemory, free: freeMemory, used: usedMemory} = await si.mem();
 
     memoryMetrics = {
-      totalMemory: Number((totalMemory / 1024 / 1024 / 1000).toFixed(2)),
-      freeMemory: Number((freeMemory / 1024 / 1024 / 1000).toFixed(2)),
-      usedMemory: Number((usedMemory / 1024 / 1024 / 1000).toFixed(2)),
+      totalMemorySize: formatToGb(totalMemory),
+      availableMemorySize: formatToGb(freeMemory),
+      usedMemorySize: formatToGb(usedMemory),
       usagePercentage: Math.round((usedMemory / totalMemory) * 100),
       updatedAt: new Date().toISOString(),
     }

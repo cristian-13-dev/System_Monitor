@@ -1,17 +1,22 @@
 import si from 'systeminformation'
+import { formatToGb } from "../utils/formatToGb.js";
 
 export type StorageMetrics = {
   totalStorageSize: number;
+  availableStorageSize: number;
   usedStorageSize: number;
-  storageType: string;
-  storageModel: string;
+  storageType: string | null;
+  storageModel: string | null;
+  updatedAt: string | null;
 }
 
 let storageMetrics: StorageMetrics = {
   totalStorageSize: 0,
+  availableStorageSize: 0,
   usedStorageSize: 0,
-  storageType: '',
-  storageModel: '',
+  storageType: null,
+  storageModel: null,
+  updatedAt: null,
 }
 
 async function refreshStorageMetrics() {
@@ -21,14 +26,16 @@ async function refreshStorageMetrics() {
       si.fsSize(),
     ]);
 
-    const { physical: storageType = '', model: storageModel = '' } = blockDevices[0] ?? {};
-    const { size: totalStorageSize = 0, used: usedStorageSize = 0 } = fsSizes[0] ?? {};
+    const { physical: storageType, model: storageModel } = blockDevices[0] ?? {};
+    const { size: totalStorageSize = 0, available: availableStorageSize, used: usedStorageSize = 0 } = fsSizes[0] ?? {};
 
     storageMetrics = {
       storageModel,
       storageType,
-      totalStorageSize: Number((totalStorageSize / 1024 / 1024 / 1000).toFixed(2)),
-      usedStorageSize: Number((usedStorageSize / 1024 / 1024 / 1000).toFixed(2)),
+      totalStorageSize: formatToGb(totalStorageSize),
+      usedStorageSize: formatToGb(usedStorageSize),
+      availableStorageSize: formatToGb(availableStorageSize),
+      updatedAt: new Date().toISOString(),
     }
   } catch (error) {
     console.error('Failed to refresh storage metrics', error);
