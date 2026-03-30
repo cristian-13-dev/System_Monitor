@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { getCPUMetrics } from '../controllers/cpu.controller.js';
+import { getCpu } from '../controllers/cpu.controller.js';
 
 const router = Router();
 
-router.get('/cpu', getCPUMetrics);
+router.get('/cpu', getCpu);
 
 export default router;

@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { getRAMMetrics } from "../controllers/memory.controller.js";
+import { getRam } from "../controllers/memory.controller.js";
 
 const router = Router();
 
-router.get('/memory', getRAMMetrics);
+router.get('/memory', getRam);
 
 export default router;

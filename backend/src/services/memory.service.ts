@@ -21,9 +21,9 @@ async function refreshMemoryMetrics(): Promise<void> {
     const {total: totalMemory, free: freeMemory, used: usedMemory} = await si.mem();
 
     memoryMetrics = {
-      totalMemory: Number((totalMemory / 1024 / 1024).toFixed(2)),
-      freeMemory: Number((freeMemory / 1024 / 1024).toFixed(2)),
-      usedMemory: Number((usedMemory / 1024 / 1024).toFixed(2)),
+      totalMemory: Number((totalMemory / 1024 / 1024 / 1000).toFixed(2)),
+      freeMemory: Number((freeMemory / 1024 / 1024 / 1000).toFixed(2)),
+      usedMemory: Number((usedMemory / 1024 / 1024 / 1000).toFixed(2)),
       usagePercentage: Math.round((usedMemory / totalMemory) * 100),
       updatedAt: new Date().toISOString(),
     }
