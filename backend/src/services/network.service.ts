@@ -1,5 +1,5 @@
 import si from 'systeminformation';
-import { formatToMbps } from '../utils/formatToMbps.js';
+import {formatToMbps} from '../utils/formatToMbps.js';
 
 export type NetworkInterfaceMetrics = {
   networkInterface: string;
@@ -22,9 +22,10 @@ let networkMetrics: NetworkMetrics = {
 
 async function refreshNetworkMetrics(): Promise<void> {
   try {
-    const [interfaces, stats] = await Promise.all([
+    const [interfaces, stats, latency] = await Promise.all([
       si.networkInterfaces(),
       si.networkStats(),
+      si.inetLatency(),
     ]);
 
     const filtered = interfaces.filter(
@@ -40,10 +41,10 @@ async function refreshNetworkMetrics(): Promise<void> {
       return {
         networkInterface: i.iface,
         ipAddress: i.ip4 ?? null,
-        speedMbps: i.speed! > 0 ? i.speed : null,
-        downloadMbps: stat ? formatToMbps(stat.rx_sec) : 0,
-        uploadMbps: stat ? formatToMbps(stat.tx_sec) : 0,
-        latencyMs: stat?.ms ?? null,
+        speedMbps: i.speed && i.speed > 0 ? i.speed : null,
+        downloadMbps: stat?.rx_sec ? formatToMbps(stat.rx_sec) : 0,
+        uploadMbps: stat?.tx_sec ? formatToMbps(stat.tx_sec) : 0,
+        latencyMs: latency,
       };
     });
 
