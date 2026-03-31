@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import si from 'systeminformation';
-import { formatToGb } from '../utils/formatToGb.js';
+import {formatToGb} from '../utils/formatToGb.js';
 
 export type MemorySection = {
   total: number;
@@ -120,27 +120,6 @@ async function getLinuxMemoryMetrics(): Promise<MemoryMetrics> {
 
   const swap = buildSwapSection(swapTotal, swapFree);
 
-  console.log('[memory][linux][/proc/meminfo]', {
-    MemTotal: meminfo.MemTotal,
-    MemAvailable: meminfo.MemAvailable,
-    MemFree: meminfo.MemFree,
-    Cached: meminfo.Cached,
-    SReclaimable: meminfo.SReclaimable,
-    SwapTotal: meminfo.SwapTotal,
-    SwapFree: meminfo.SwapFree,
-  });
-
-  console.log('[memory][linux][computed]', {
-    raw,
-    swap,
-    interpreted: {
-      usedBytes: memTotal - memAvailable,
-      availableBytes: memAvailable,
-      freeBytes: memFree,
-      cachedBytes: cached + sReclaimable,
-    },
-  });
-
   return {
     raw,
     swap,
@@ -164,16 +143,6 @@ async function getFallbackMemoryMetrics(): Promise<MemoryMetrics> {
     `[memory] Non-Linux platform detected (${process.platform}). Using fallback memory metrics.`
   );
 
-  console.log('[memory][fallback][systeminformation]', {
-    total: mem.total,
-    available: mem.available,
-    free: mem.free,
-    buffcache: mem.buffcache,
-    swaptotal: mem.swaptotal,
-    swapfree: mem.swapfree,
-    swapused: mem.swapused,
-  });
-
   return {
     raw,
     swap,
@@ -187,15 +156,12 @@ async function refreshMemoryMetrics(): Promise<void> {
       process.platform === 'linux'
         ? await getLinuxMemoryMetrics()
         : await getFallbackMemoryMetrics();
-
-    console.log('[memory][final]', JSON.stringify(memoryMetrics, null, 2));
   } catch (error) {
     console.error('Failed to refresh memory metrics:', error);
   }
 }
 
 export async function startMemoryMetricsPolling(): Promise<void> {
-  console.log(`[memory] starting polling on platform=${process.platform}`);
   await refreshMemoryMetrics();
 
   setInterval(() => {

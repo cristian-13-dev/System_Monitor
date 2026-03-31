@@ -1,5 +1,4 @@
-import "./App.css";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowDown,
@@ -7,22 +6,20 @@ import {
   Cpu,
   HardDrive,
   MemoryStick,
+  Monitor,
   Network,
   RefreshCw,
-  Wifi,
-  Monitor,
   Server,
-  Microchip,
+  Wifi,
 } from "lucide-react";
 import {
+  Area,
+  AreaChart,
+  CartesianGrid,
   ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  AreaChart,
-  Area,
-  Legend,
 } from "recharts";
 
 type MetricsResponse = {
@@ -51,13 +48,17 @@ type MetricsResponse = {
       total: number;
       available: number;
       used: number;
-      usagePercentage: number;
+      free: number;
+      cached: number;
+      usagePercentage?: number | null;
+      pressurePercentage: number;
+      availabilityPercentage: number;
     };
     swap: {
       total: number;
       available: number;
       used: number;
-      usagePercentage: number;
+      usagePercentage: number | null;
     };
     updatedAt: string;
   };
@@ -73,7 +74,8 @@ type MetricsResponse = {
     interfaces: {
       networkInterface: string;
       ipAddress: string;
-      speedMbps: number;
+      speedMbps: number | null;
+      currentThroughputMbps?: number;
       downloadMbps: number;
       uploadMbps: number;
       latencyMs: number;
@@ -85,29 +87,24 @@ type MetricsResponse = {
 type HistoryPoint = {
   time: string;
   cpu: number;
-  memory: number;
-  download: number;
-  upload: number;
+  availableRam: number;
+  pressure: number;
+  throughput: number;
 };
+
+const API_URL = "http://192.168.18.205:3001/api/metrics";
+const HISTORY_LIMIT = 60;
 
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function formatDate(date: string) {
-  return new Date(date).toLocaleString("ro-RO", {
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+function formatNumber(value: number, digits = 2) {
+  return Number.isFinite(value) ? value.toFixed(digits) : "0.00";
 }
 
-function formatTime24(date: string) {
-  return new Date(date).toLocaleTimeString("ro-RO", {
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString("ro-RO", {
     hour12: false,
     hour: "2-digit",
     minute: "2-digit",
@@ -115,7 +112,7 @@ function formatTime24(date: string) {
   });
 }
 
-function formatNow24() {
+function nowLabel() {
   return new Date().toLocaleTimeString("ro-RO", {
     hour12: false,
     hour: "2-digit",
@@ -126,269 +123,229 @@ function formatNow24() {
 
 function formatUptime(seconds: number) {
   const days = Math.floor(seconds / 86400);
-  const hrs = Math.floor((seconds % 86400) / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
 
-  if (days > 0) return `${days}d ${hrs}h ${mins}m`;
-  return `${hrs}h ${mins}m`;
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  return `${hours}h ${minutes}m`;
 }
 
-function getTone(value: number) {
+function getTone(value: number, mode: "load" | "available" = "load") {
+  if (mode === "available") {
+    if (value <= 10) {
+      return {
+        label: "critical",
+        bg: "bg-[#ff5c5c]",
+        text: "text-[#ff5c5c]",
+        soft: "bg-[#ffebe9]",
+        border: "border-black",
+      };
+    }
+    if (value <= 25) {
+      return {
+        label: "watch",
+        bg: "bg-[#ffd84d]",
+        text: "text-[#8a6200]",
+        soft: "bg-[#fff6cf]",
+        border: "border-black",
+      };
+    }
+    return {
+      label: "healthy",
+      bg: "bg-[#4ade80]",
+      text: "text-[#166534]",
+      soft: "bg-[#dcfce7]",
+      border: "border-black",
+    };
+  }
+
   if (value >= 85) {
     return {
-      text: "text-rose-600",
-      bg: "bg-rose-500",
-      soft: "bg-rose-50",
-      badge: "bg-rose-100 text-rose-700",
-      label: "High",
-      border: "border-rose-200",
+      label: "critical",
+      bg: "bg-[#ff5c5c]",
+      text: "text-[#ff5c5c]",
+      soft: "bg-[#ffebe9]",
+      border: "border-black",
     };
   }
-
   if (value >= 65) {
     return {
-      text: "text-amber-600",
-      bg: "bg-amber-500",
-      soft: "bg-amber-50",
-      badge: "bg-amber-100 text-amber-700",
-      label: "Medium",
-      border: "border-amber-200",
+      label: "watch",
+      bg: "bg-[#ffd84d]",
+      text: "text-[#8a6200]",
+      soft: "bg-[#fff6cf]",
+      border: "border-black",
     };
   }
-
   return {
-    text: "text-sky-600",
-    bg: "bg-sky-500",
-    soft: "bg-sky-50",
-    badge: "bg-sky-100 text-sky-700",
-    label: "Good",
-    border: "border-sky-200",
+    label: "stable",
+    bg: "bg-[#5b8cff]",
+    text: "text-[#2143a6]",
+    soft: "bg-[#e8efff]",
+    border: "border-black",
   };
 }
 
-const CustomTooltip = memo(function CustomTooltip({
-                                                    active,
-                                                    payload,
-                                                    label,
-                                                  }: {
-  active?: boolean;
-  payload?: Array<{ name: string; value: number; color?: string }>;
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-xl">
-      <p className="mb-2 text-xs font-medium text-slate-500">{label}</p>
-      <div className="space-y-1">
-        {payload.map((entry, index) => (
-          <div key={`${entry.name}-${index}`} className="flex items-center gap-2 text-xs">
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: entry.color ?? "#334155" }}
-            />
-            <span className="text-slate-500">{entry.name}:</span>
-            <span className="font-semibold text-slate-900">{entry.value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-});
-
-const Surface = memo(function Surface({
-                                        children,
-                                        className,
-                                      }: {
-  children: React.ReactNode;
-  className?: string;
-}) {
+function BrutBox({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div
       className={cn(
-        "rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.05)]",
+        "border-[3px] border-black bg-white shadow-[8px_8px_0px_#000]",
         className
       )}
     >
       {children}
     </div>
   );
-});
+}
 
-const SectionTitle = memo(function SectionTitle({
-                                                  icon,
-                                                  title,
-                                                  subtitle,
-                                                  action,
-                                                }: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  action?: React.ReactNode;
-}) {
+function SectionTag({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-5 flex items-center justify-between gap-3">
-      <div className="flex items-center gap-3">
-        <div className="rounded-xl bg-slate-100 p-2.5 text-slate-700">{icon}</div>
-        <div>
-          <h2 className="text-base font-semibold text-slate-900 sm:text-lg">{title}</h2>
-          {subtitle && <p className="text-xs text-slate-500 sm:text-sm">{subtitle}</p>}
-        </div>
-      </div>
-      {action}
-    </div>
+    <span className="inline-flex border-2 border-black bg-black px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-white">
+      {children}
+    </span>
   );
-});
+}
 
-const StatRow = memo(function StatRow({
-                                        label,
-                                        value,
-                                      }: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 py-2.5">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className="max-w-[60%] break-all text-right text-sm font-medium text-slate-900">
-        {value}
-      </span>
-    </div>
-  );
-});
-
-const Progress = memo(function Progress({
-                                          value,
-                                          colorClass,
-                                          heightClass = "h-2",
-                                        }: {
+function ProgressRail({
+                        value,
+                        mode = "load",
+                      }: {
   value: number;
-  colorClass: string;
-  heightClass?: string;
+  mode?: "load" | "available";
 }) {
+  const tone = getTone(value, mode);
+
   return (
-    <div className={cn("overflow-hidden rounded-full bg-slate-100", heightClass)}>
+    <div className="h-4 w-full border-2 border-black bg-white">
       <div
-        className={cn("h-full rounded-full transition-[width] duration-300", colorClass)}
+        className={cn("h-full transition-[width] duration-300", tone.bg)}
         style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
       />
     </div>
   );
-});
+}
 
-const HeroMetricCard = memo(function HeroMetricCard({
-                                                      title,
-                                                      icon,
-                                                      value,
-                                                      sublabel,
-                                                      usage,
-                                                    }: {
+function StatLine({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b-2 border-dashed border-black/15 py-3 last:border-b-0">
+      <span className="text-sm font-medium uppercase tracking-wide text-black/55">{label}</span>
+      <span className="max-w-[60%] text-right text-sm font-bold text-black">{value}</span>
+    </div>
+  );
+}
+
+function MetricStrip({
+                       title,
+                       value,
+                       subtitle,
+                       meterValue,
+                       mode = "load",
+                       icon,
+                       accentClass,
+                       aside,
+                     }: {
   title: string;
-  icon: React.ReactNode;
   value: string;
-  sublabel: string;
-  usage: number;
+  subtitle: string;
+  meterValue: number;
+  mode?: "load" | "available";
+  icon: React.ReactNode;
+  accentClass: string;
+  aside?: React.ReactNode;
 }) {
-  const tone = getTone(usage);
+  const tone = getTone(meterValue, mode);
 
   return (
-    <Surface className="p-4 sm:p-5">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className={cn("rounded-xl p-3", tone.soft, tone.text)}>{icon}</div>
-          <div>
-            <p className="text-sm font-medium text-slate-600">{title}</p>
-            <p className="text-xs text-slate-400">{sublabel}</p>
+    <div className="border-b-[3px] border-black last:border-b-0">
+      <div className="grid grid-cols-1 gap-5 px-5 py-5 lg:grid-cols-[1.3fr_0.7fr] lg:px-6">
+        <div className="flex items-start gap-4">
+          <div className={cn("flex h-14 w-14 shrink-0 items-center justify-center border-[3px] border-black", accentClass)}>
+            {icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex flex-wrap items-center gap-3">
+              <h2 className="text-xl font-black uppercase tracking-tight text-black">{title}</h2>
+              <span className={cn("text-xs font-black uppercase tracking-[0.18em]", tone.text)}>
+                {tone.label}
+              </span>
+            </div>
+            <p className="text-5xl font-black leading-none tracking-tight text-black">{value}</p>
+            <p className="mt-2 text-sm font-medium text-black/60">{subtitle}</p>
           </div>
         </div>
 
-        <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold", tone.badge)}>
-          {tone.label}
-        </span>
+        <div className="flex flex-col justify-between gap-3">{aside}</div>
       </div>
-
-      <div className="mb-4">
-        <p className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">{value}</p>
+      <div className="px-5 pb-5 lg:px-6">
+        <ProgressRail value={meterValue} mode={mode} />
       </div>
-
-      <Progress value={usage} colorClass={tone.bg} />
-    </Surface>
+    </div>
   );
-});
+}
 
-const ChartCard = memo(function ChartCard({
-                                            title,
-                                            icon,
-                                            children,
-                                            className,
-                                            action,
-                                          }: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  className?: string;
-  action?: React.ReactNode;
-}) {
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+
   return (
-    <Surface className={cn("p-4 sm:p-5", className)}>
-      <SectionTitle icon={icon} title={title} action={action} />
-      {children}
-    </Surface>
+    <div className="border-[3px] border-black bg-white px-3 py-2 shadow-[6px_6px_0px_#000]">
+      <p className="mb-2 text-xs font-black uppercase tracking-wide text-black/60">{label}</p>
+      <div className="space-y-1.5">
+        {payload.map((entry: any, index: number) => (
+          <div key={`${entry.name}-${index}`} className="flex items-center gap-2 text-xs">
+            <span className="h-2.5 w-2.5 border border-black" style={{ backgroundColor: entry.color }} />
+            <span className="font-medium text-black/60">{entry.name}</span>
+            <span className="font-black text-black">{entry.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
-});
+}
 
 export default function App() {
   const [data, setData] = useState<MetricsResponse | null>(null);
   const [history, setHistory] = useState<HistoryPoint[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [uptimeDisplay, setUptimeDisplay] = useState(0);
-  const [storageUsageDisplay, setStorageUsageDisplay] = useState(0);
-
   const inFlightRef = useRef(false);
 
-  const getSpecs = useCallback(async (showLoader = false) => {
+  const fetchMetrics = useCallback(async (showLoader = false) => {
     if (inFlightRef.current) return;
     inFlightRef.current = true;
 
     try {
       if (showLoader) setLoading(true);
 
-      const response = await fetch("http://192.168.18.205:3001/api/metrics", {
+      const response = await fetch(API_URL, {
         headers: { Accept: "application/json" },
       });
 
       if (!response.ok) {
-        throw new Error(`Request failed: ${response.status}`);
+        throw new Error(`Request failed with status ${response.status}`);
       }
 
       const result: MetricsResponse = await response.json();
-
       setData(result);
-      setError(null);
       setUptimeDisplay(result.system.uptime);
+      setError(null);
 
-      const storageUsage =
-        result.storage.totalStorageSize > 0
-          ? Number(
-            (
-              (result.storage.usedStorageSize / result.storage.totalStorageSize) *
-              100
-            ).toFixed(2)
-          )
-          : 0;
+      const primary = result.network.interfaces[0];
+      const throughput =
+        primary?.currentThroughputMbps ??
+        Number(((primary?.downloadMbps ?? 0) + (primary?.uploadMbps ?? 0)).toFixed(2));
 
-      setStorageUsageDisplay(storageUsage);
-
-      const point: HistoryPoint = {
-        time: formatNow24(),
-        cpu: Number(result.cpu.averageCpuUtilization ?? 0),
-        memory: Number(result.memory.raw.usagePercentage ?? 0),
-        download: Number(result.network.interfaces[0]?.downloadMbps ?? 0),
-        upload: Number(result.network.interfaces[0]?.uploadMbps ?? 0),
-      };
-
-      setHistory((prev) => [...prev.slice(-39), point]);
+      setHistory((prev) => [
+        ...prev.slice(-(HISTORY_LIMIT - 1)),
+        {
+          time: nowLabel(),
+          cpu: Number(result.cpu.averageCpuUtilization ?? 0),
+          availableRam: Number(result.memory.raw.availabilityPercentage ?? 0),
+          pressure: Number(result.memory.raw.pressurePercentage ?? 0),
+          throughput,
+        },
+      ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -398,14 +355,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    getSpecs(true);
-    const id = window.setInterval(() => getSpecs(false), 1000);
+    fetchMetrics(true);
+    const id = window.setInterval(() => fetchMetrics(false), 2000);
     return () => window.clearInterval(id);
-  }, [getSpecs]);
+  }, [fetchMetrics]);
 
   useEffect(() => {
     if (!data) return;
-
     setUptimeDisplay(data.system.uptime);
 
     const id = window.setInterval(() => {
@@ -413,66 +369,31 @@ export default function App() {
     }, 60000);
 
     return () => window.clearInterval(id);
-  }, [data?.system.updatedAt, data]);
+  }, [data?.system.updatedAt]);
 
-  useEffect(() => {
-    if (!data) return;
+  const primaryInterface = data?.network.interfaces[0];
 
-    const storageUsage =
-      data.storage.totalStorageSize > 0
-        ? Number(
-          (
-            (data.storage.usedStorageSize / data.storage.totalStorageSize) *
-            100
-          ).toFixed(2)
-        )
-        : 0;
+  const throughput = useMemo(() => {
+    if (!primaryInterface) return 0;
+    return (
+      primaryInterface.currentThroughputMbps ??
+      Number(((primaryInterface.downloadMbps ?? 0) + (primaryInterface.uploadMbps ?? 0)).toFixed(2))
+    );
+  }, [primaryInterface]);
 
-    setStorageUsageDisplay(storageUsage);
-
-    const id = window.setInterval(() => {
-      setStorageUsageDisplay(
-        data.storage.totalStorageSize > 0
-          ? Number(
-            (
-              (data.storage.usedStorageSize / data.storage.totalStorageSize) *
-              100
-            ).toFixed(2)
-          )
-          : 0
-      );
-    }, 60000);
-
-    return () => window.clearInterval(id);
-  }, [
-    data?.storage.updatedAt,
-    data?.storage.totalStorageSize,
-    data?.storage.usedStorageSize,
-    data,
-  ]);
-
-  const networkPrimary = data?.network.interfaces[0];
-
-  const cpuUsage = useMemo(() => data?.cpu.averageCpuUtilization ?? 0, [data]);
-  const memoryUsage = useMemo(() => data?.memory.raw.usagePercentage ?? 0, [data]);
+  const storageUsage = useMemo(() => {
+    if (!data || data.storage.totalStorageSize <= 0) return 0;
+    return Number(
+      ((data.storage.usedStorageSize / data.storage.totalStorageSize) * 100).toFixed(0)
+    );
+  }, [data]);
 
   if (loading && !data) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-        <div className="mx-auto max-w-400">
-          <div className="mb-6 flex items-center gap-3">
-            <RefreshCw className="animate-spin text-slate-700" size={22} />
-            <h1 className="text-2xl font-bold text-slate-900">Loading dashboard...</h1>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <div
-                key={index}
-                className="h-56 animate-pulse rounded-2xl border border-slate-200 bg-white"
-              />
-            ))}
-          </div>
+      <div className="min-h-screen bg-[#f2efe8] px-4 py-6 sm:px-6">
+        <div className="mx-auto max-w-[1700px] space-y-4 animate-pulse">
+          <div className="h-28 border-[3px] border-black bg-[#fff8dc]" />
+          <div className="h-[720px] border-[3px] border-black bg-white" />
         </div>
       </div>
     );
@@ -480,416 +401,286 @@ export default function App() {
 
   if (!data) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-        <div className="mx-auto max-w-4xl rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
-          {error || "No data available"}
+      <div className="min-h-screen bg-[#f2efe8] px-4 py-6 sm:px-6">
+        <div className="mx-auto max-w-4xl border-[3px] border-black bg-[#ffebe9] p-6 shadow-[8px_8px_0px_#000]">
+          <p className="text-base font-bold text-black">{error || "No data available"}</p>
         </div>
       </div>
     );
   }
 
+  const cpuTone = getTone(data.cpu.averageCpuUtilization);
+  const memoryAvailableTone = getTone(data.memory.raw.availabilityPercentage, "available");
+  const memoryPressureTone = getTone(data.memory.raw.pressurePercentage, "load");
+  const storageTone = getTone(storageUsage);
+
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-      <div className="mx-auto max-w-400 space-y-6">
-        <Surface className="overflow-hidden">
-          <div className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 sm:p-6">
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-              <div className="min-w-0">
+    <div className="min-h-screen bg-[#f2efe8] bg-[radial-gradient(circle_at_top_left,#fff7c8_0%,transparent_28%),radial-gradient(circle_at_top_right,#dbeafe_0%,transparent_24%)] px-4 py-5 sm:px-6">
+      <div className="mx-auto max-w-[1700px] space-y-5">
+        <BrutBox className="overflow-hidden">
+          <div className="border-b-[3px] border-black bg-[#ffe16a] px-5 py-5 lg:px-6">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+              <div>
                 <div className="mb-3 flex items-center gap-3">
-                  <div className="rounded-2xl bg-slate-950 p-3 text-white shadow-sm">
+                  <div className="flex h-14 w-14 items-center justify-center border-[3px] border-black bg-white text-black">
                     <Activity size={22} />
                   </div>
-                  <div className="min-w-0">
-                    <h1 className="truncate text-2xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                      System Dashboard
+                  <div>
+                    <SectionTag>server monitor</SectionTag>
+                    <h1 className="mt-2 text-3xl font-black uppercase tracking-tight text-black sm:text-5xl">
+                      Brutalist runtime board
                     </h1>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Device health and live performance overview
-                    </p>
                   </div>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                  <span>{data.system.hostname}</span>
-                  <span className="text-slate-300">•</span>
-                  <span>{data.system.platform}</span>
-                  <span className="text-slate-300">•</span>
-                  <span>{data.system.architecture}</span>
-                  <span className="text-slate-300">•</span>
-                  <span>{data.system.distro}</span>
-                </div>
+                <p className="max-w-3xl text-sm font-medium text-black/70">
+                  A semi-minimalist neobrutalist dashboard focused on signal clarity, system pressure and live behavior.
+                </p>
               </div>
 
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <div className="rounded-xl bg-slate-50 px-4 py-3">
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                    Last update
-                  </p>
-                  <p className="text-sm font-semibold text-slate-900">
-                    {formatDate(data.system.updatedAt)}
-                  </p>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:min-w-[760px]">
+                <div className="border-[3px] border-black bg-white px-3 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/55">uptime</p>
+                  <p className="mt-2 text-lg font-black text-black">{formatUptime(uptimeDisplay)}</p>
                 </div>
-
+                <div className="border-[3px] border-black bg-white px-3 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/55">latency</p>
+                  <p className="mt-2 text-lg font-black text-black">{formatNumber(primaryInterface?.latencyMs ?? 0, 1)} ms</p>
+                </div>
+                <div className="border-[3px] border-black bg-white px-3 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/55">updated</p>
+                  <p className="mt-2 text-lg font-black text-black">{formatTime(data.system.updatedAt)}</p>
+                </div>
                 <button
-                  onClick={() => getSpecs(false)}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
+                  onClick={() => fetchMetrics(false)}
+                  className="flex items-center justify-center gap-2 border-[3px] border-black bg-black px-4 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none shadow-[4px_4px_0px_#000]"
                 >
-                  <RefreshCw size={16} />
+                  <RefreshCw size={15} />
                   Refresh
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-x-8 gap-y-3 p-5 sm:grid-cols-2 xl:grid-cols-3 sm:p-6">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
-                <Monitor size={14} />
-                System
-              </div>
-              <p className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">Manufacturer:</span>{" "}
-                {data.system.manufacturer}
-              </p>
-              <p className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">Model:</span> {data.system.model}
-              </p>
-              <p className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">Release:</span>{" "}
-                {data.system.release}
-              </p>
+          {error && (
+            <div className="border-b-[3px] border-black bg-[#ffebe9] px-5 py-3 text-sm font-bold text-black lg:px-6">
+              {error}
             </div>
+          )}
 
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
-                <Server size={14} />
-                OS / Kernel
-              </div>
-              <p className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">OS:</span> {data.system.distro}
-              </p>
-              <p className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">Kernel:</span>{" "}
-                {data.system.kernel}
-              </p>
-              <p className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">Timezone:</span>{" "}
-                {data.system.timezone}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
-                <Microchip size={14} />
-                Runtime
-              </div>
-              <p className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">Hostname:</span>{" "}
-                {data.system.hostname}
-              </p>
-              <p className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">Uptime:</span>{" "}
-                {formatUptime(uptimeDisplay)}
-              </p>
-              <p className="text-sm text-slate-600">
-                <span className="font-semibold text-slate-900">Updated:</span>{" "}
-                {formatTime24(data.system.updatedAt)}
-              </p>
-            </div>
-          </div>
-        </Surface>
-
-        {error && (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
-            {error}
-          </div>
-        )}
-
-        <section className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-4">
-          <HeroMetricCard
-            title="CPU"
-            icon={<Cpu size={20} />}
-            value={`${cpuUsage.toFixed(1)}%`}
-            sublabel="Average utilization"
-            usage={cpuUsage}
-          />
-
-          <HeroMetricCard
-            title="Memory"
-            icon={<MemoryStick size={20} />}
-            value={`${memoryUsage.toFixed(0)}%`}
-            sublabel="RAM consumption"
-            usage={memoryUsage}
-          />
-
-          <HeroMetricCard
-            title="Storage"
-            icon={<HardDrive size={20} />}
-            value={`${storageUsageDisplay.toFixed(0)}%`}
-            sublabel="Disk occupancy"
-            usage={storageUsageDisplay}
-          />
-
-          <Surface className="relative p-4 sm:p-5">
-            <div className="absolute right-4 top-4">
-              <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-white">
-                {networkPrimary?.latencyMs ?? 0} ms
-              </span>
-            </div>
-
-            <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-xl bg-slate-100 p-3 text-slate-700">
-                <Wifi size={20} />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-slate-600">Network</p>
-                <p className="text-xs text-slate-400">Transfer and interface status</p>
-              </div>
-            </div>
-
-            <div className="mb-4">
-              <p className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-                {networkPrimary?.speedMbps ?? 0} Mbps
-              </p>
-              <p className="text-sm text-slate-500">Interface speed</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl bg-slate-50 p-3">
-                <div className="mb-1 flex items-center gap-2 text-slate-500">
-                  <ArrowDown size={14} />
-                  <span className="text-xs">Download</span>
-                </div>
-                <p className="text-lg font-semibold text-slate-900">
-                  {networkPrimary?.downloadMbps ?? 0} Mbps
-                </p>
-              </div>
-
-              <div className="rounded-xl bg-slate-50 p-3">
-                <div className="mb-1 flex items-center gap-2 text-slate-500">
-                  <ArrowUp size={14} />
-                  <span className="text-xs">Upload</span>
-                </div>
-                <p className="text-lg font-semibold text-slate-900">
-                  {networkPrimary?.uploadMbps ?? 0} Mbps
-                </p>
-              </div>
-            </div>
-          </Surface>
-        </section>
-
-        <section className="grid grid-cols-1 gap-4 2xl:grid-cols-12">
-          <ChartCard
-            title="CPU Trend"
-            icon={<Cpu size={18} />}
-            className="2xl:col-span-4"
-          >
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={history}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={24} stroke="#94a3b8" />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} width={34} stroke="#94a3b8" />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey="cpu"
-                    stroke="#0f172a"
-                    fill="#cbd5e1"
-                    strokeWidth={2.5}
-                    isAnimationActive={false}
-                    name="CPU %"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </ChartCard>
-
-          <ChartCard
-            title="Memory Trend"
-            icon={<MemoryStick size={18} />}
-            className="2xl:col-span-4"
-          >
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={history}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={24} stroke="#94a3b8" />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} width={34} stroke="#94a3b8" />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey="memory"
-                    stroke="#0284c7"
-                    fill="#bae6fd"
-                    strokeWidth={2.5}
-                    isAnimationActive={false}
-                    name="Memory %"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </ChartCard>
-
-          <ChartCard
-            title="Network Traffic"
-            icon={<Network size={18} />}
-            className="2xl:col-span-4"
-          >
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={history}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={24} stroke="#94a3b8" />
-                  <YAxis tick={{ fontSize: 11 }} width={42} stroke="#94a3b8" />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: "12px" }} />
-                  <Area
-                    type="monotone"
-                    dataKey="download"
-                    stroke="#0f172a"
-                    fill="#cbd5e1"
-                    strokeWidth={2.5}
-                    isAnimationActive={false}
-                    name="Download"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="upload"
-                    stroke="#0ea5e9"
-                    fill="#bae6fd"
-                    strokeWidth={2.5}
-                    isAnimationActive={false}
-                    name="Upload"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </ChartCard>
-        </section>
-
-        <section className="grid grid-cols-1 gap-4 2xl:grid-cols-12">
-          <Surface className="p-4 sm:p-5 2xl:col-span-6">
-            <SectionTitle
-              icon={<Cpu size={18} />}
-              title="CPU Details"
-              subtitle="Compact per-core live utilization"
-            />
-
-            <div className="mt-4 divide-y divide-slate-100">
-              <StatRow label="Average Frequency" value={`${data.cpu.averageCpuFrequency} GHz`} />
-              <StatRow
-                label="Average Temperature"
-                value={
-                  data.cpu.averageCpuTemperature !== null
-                    ? `${data.cpu.averageCpuTemperature}°C`
-                    : "N/A"
+          <div className="grid grid-cols-1 xl:grid-cols-[1.12fr_0.88fr]">
+            <section className="border-r-[3px] border-black">
+              <MetricStrip
+                title="CPU"
+                value={`${formatNumber(data.cpu.averageCpuUtilization, 1)}%`}
+                subtitle={`Average load · ${formatNumber(data.cpu.averageCpuFrequency, 1)} GHz`}
+                meterValue={data.cpu.averageCpuUtilization}
+                icon={<Cpu size={20} />}
+                accentClass="bg-[#dbeafe] text-black"
+                aside={
+                  <div className="space-y-3 border-[3px] border-black bg-white p-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">status</p>
+                      <p className={cn("mt-2 text-sm font-black uppercase", cpuTone.text)}>{cpuTone.label}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">temperature</p>
+                      <p className="mt-2 text-sm font-black text-black">
+                        {data.cpu.averageCpuTemperature !== null ? `${data.cpu.averageCpuTemperature}°C` : "N/A"}
+                      </p>
+                    </div>
+                  </div>
                 }
               />
-              <StatRow label="Updated" value={formatTime24(data.cpu.updatedAt)} />
-            </div>
-          </Surface>
 
-          <Surface className="p-4 sm:p-5 2xl:col-span-3">
-            <SectionTitle
-              icon={<MemoryStick size={18} />}
-              title="Memory"
-              subtitle="RAM and swap utilization"
-            />
-
-            <div className="space-y-4">
-              <div className="rounded-xl bg-slate-50 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-900">RAM</h3>
-                  <span
-                    className={cn(
-                      "rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                      getTone(data.memory.raw.usagePercentage).badge
-                    )}
-                  >
-                    {getTone(data.memory.raw.usagePercentage).label}
-                  </span>
-                </div>
-
-                <div className="mb-3">
-                  <p className="text-3xl font-bold tracking-tight text-slate-950">
-                    {data.memory.raw.usagePercentage}%
-                  </p>
-                  <p className="text-sm text-slate-500">Current memory usage</p>
-                </div>
-
-                <Progress
-                  value={data.memory.raw.usagePercentage}
-                  colorClass={getTone(data.memory.raw.usagePercentage).bg}
-                />
-
-                <div className="mt-4 divide-y divide-slate-100">
-                  <StatRow label="Total RAM" value={`${data.memory.raw.total} GB`} />
-                  <StatRow label="Used RAM" value={`${data.memory.raw.used} GB`} />
-                  <StatRow label="Available RAM" value={`${data.memory.raw.available} GB`} />
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-slate-50 p-4">
-                <h3 className="mb-2 text-sm font-semibold text-slate-900">Swap</h3>
-                <div className="divide-y divide-slate-100">
-                  <StatRow label="Total Swap" value={`${data.memory.swap.total} GB`} />
-                  <StatRow label="Used Swap" value={`${data.memory.swap.used} GB`} />
-                  <StatRow label="Available Swap" value={`${data.memory.swap.available} GB`} />
-                  <StatRow label="Usage" value={`${data.memory.swap.usagePercentage}%`} />
-                  <StatRow label="Updated" value={formatTime24(data.memory.updatedAt)} />
-                </div>
-              </div>
-            </div>
-          </Surface>
-
-          <Surface className="p-4 sm:p-5 2xl:col-span-3">
-            <SectionTitle
-              icon={<HardDrive size={18} />}
-              title="Storage"
-              subtitle="Disk capacity and availability"
-            />
-
-            <div className="rounded-xl bg-slate-50 p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-900">
-                  {data.storage.storageType || "Storage"}
-                </h3>
-                <span
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                    getTone(storageUsageDisplay).badge
-                  )}
-                >
-                  {getTone(storageUsageDisplay).label}
-                </span>
-              </div>
-
-              <div className="mb-3">
-                <p className="text-3xl font-bold tracking-tight text-slate-950">
-                  {storageUsageDisplay.toFixed(0)}%
-                </p>
-                <p className="text-sm text-slate-500">Current disk usage</p>
-              </div>
-
-              <Progress
-                value={storageUsageDisplay}
-                colorClass={getTone(storageUsageDisplay).bg}
-                heightClass="h-3"
+              <MetricStrip
+                title="MEMORY"
+                value={`${formatNumber(data.memory.raw.pressurePercentage, 0)}%`}
+                subtitle={`${formatNumber(data.memory.raw.used, 2)} GB in pressure · ${formatNumber(data.memory.raw.available, 2)} GB still available`}
+                meterValue={data.memory.raw.pressurePercentage}
+                icon={<MemoryStick size={20} />}
+                accentClass="bg-[#dcfce7] text-black"
+                aside={
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="border-[3px] border-black bg-[#fff6cf] p-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">memory pressure</p>
+                      <p className={cn("mt-2 text-2xl font-black", memoryPressureTone.text)}>
+                        {data.memory.raw.pressurePercentage}%
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-black/65">how full RAM effectively feels</p>
+                    </div>
+                    <div className="border-[3px] border-black bg-[#dcfce7] p-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">available RAM</p>
+                      <p className={cn("mt-2 text-2xl font-black", memoryAvailableTone.text)}>
+                        {data.memory.raw.availabilityPercentage}%
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-black/65">usable headroom before stress</p>
+                    </div>
+                  </div>
+                }
               />
 
-              <div className="mt-4 divide-y divide-slate-100">
-                <StatRow label="Type" value={data.storage.storageType} />
-                <StatRow label="Model" value={data.storage.storageModel || "N/A"} />
-                <StatRow label="Total" value={`${data.storage.totalStorageSize} GB`} />
-                <StatRow label="Used" value={`${data.storage.usedStorageSize} GB`} />
-                <StatRow label="Available" value={`${data.storage.availableStorageSize} GB`} />
-                <StatRow label="Updated" value={formatTime24(data.storage.updatedAt)} />
+              <MetricStrip
+                title="STORAGE"
+                value={`${storageUsage}%`}
+                subtitle={`${formatNumber(data.storage.usedStorageSize, 2)} GB used of ${formatNumber(data.storage.totalStorageSize, 2)} GB`}
+                meterValue={storageUsage}
+                icon={<HardDrive size={20} />}
+                accentClass="bg-[#f3e8ff] text-black"
+                aside={
+                  <div className="space-y-3 border-[3px] border-black bg-white p-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">type</p>
+                      <p className="mt-2 text-sm font-black text-black">{data.storage.storageType}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">status</p>
+                      <p className={cn("mt-2 text-sm font-black uppercase", storageTone.text)}>{storageTone.label}</p>
+                    </div>
+                  </div>
+                }
+              />
+
+              <MetricStrip
+                title="NETWORK"
+                value={`${formatNumber(throughput, 2)} Mbps`}
+                subtitle="Live throughput across the primary interface"
+                meterValue={Math.min(100, throughput)}
+                icon={<Wifi size={20} />}
+                accentClass="bg-[#ffe4e6] text-black"
+                aside={
+                  <div className="space-y-3 border-[3px] border-black bg-white p-3">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">interface</p>
+                      <p className="mt-2 text-sm font-black text-black">{primaryInterface?.networkInterface ?? "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">link</p>
+                      <p className="mt-2 text-sm font-black text-black">
+                        {primaryInterface?.speedMbps ? `${formatNumber(primaryInterface.speedMbps, 0)} Mbps` : "N/A"}
+                      </p>
+                    </div>
+                  </div>
+                }
+              />
+
+              <div className="grid grid-cols-1 lg:grid-cols-2">
+                <div className="border-t-[3px] border-r-[0px] border-black p-5 lg:border-r-[3px] lg:p-6">
+                  <SectionTag>system</SectionTag>
+                  <div className="mt-4 space-y-2 text-sm font-bold text-black">
+                    <p><span className="text-black/50">Manufacturer</span> · {data.system.manufacturer}</p>
+                    <p><span className="text-black/50">Model</span> · {data.system.model}</p>
+                    <p><span className="text-black/50">Release</span> · {data.system.release}</p>
+                    <p><span className="text-black/50">Kernel</span> · {data.system.kernel}</p>
+                    <p><span className="text-black/50">Timezone</span> · {data.system.timezone}</p>
+                  </div>
+                </div>
+
+                <div className="border-t-[3px] border-black p-5 lg:p-6">
+                  <SectionTag>network route</SectionTag>
+                  <div className="mt-4 space-y-2 text-sm font-bold text-black">
+                    <p><span className="text-black/50">Interface</span> · {primaryInterface?.networkInterface ?? "N/A"}</p>
+                    <p><span className="text-black/50">IP</span> · {primaryInterface?.ipAddress ?? "N/A"}</p>
+                    <p><span className="text-black/50">Download</span> · {formatNumber(primaryInterface?.downloadMbps ?? 0, 2)} Mbps</p>
+                    <p><span className="text-black/50">Upload</span> · {formatNumber(primaryInterface?.uploadMbps ?? 0, 2)} Mbps</p>
+                    <p><span className="text-black/50">Latency</span> · {formatNumber(primaryInterface?.latencyMs ?? 0, 1)} ms</p>
+                  </div>
+                </div>
               </div>
-            </div>
-          </Surface>
-        </section>
+            </section>
+
+            <aside className="grid grid-cols-1 bg-[#f8f5ee]">
+              <div className="border-b-[3px] border-black p-5 lg:p-6">
+                <SectionTag>history</SectionTag>
+                <div className="mt-5 space-y-5">
+                  <BrutBox className="p-4">
+                    <div className="mb-2 flex items-center justify-between text-sm font-bold">
+                      <span className="uppercase text-black/60">CPU load</span>
+                      <span className="text-black">{formatNumber(data.cpu.averageCpuUtilization, 1)}%</span>
+                    </div>
+                    <div className="h-32">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={history}>
+                          <CartesianGrid strokeDasharray="4 4" stroke="#11111122" />
+                          <XAxis dataKey="time" tick={{ fontSize: 11, fill: "#444" }} minTickGap={24} axisLine={false} tickLine={false} />
+                          <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#444" }} width={30} axisLine={false} tickLine={false} />
+                          <Tooltip content={<ChartTooltip />} />
+                          <Area type="monotone" dataKey="cpu" stroke="#5b8cff" fill="#dbeafe" strokeWidth={3} isAnimationActive={false} name="CPU %" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </BrutBox>
+
+                  <BrutBox className="p-4">
+                    <div className="mb-2 flex items-center justify-between text-sm font-bold">
+                      <span className="uppercase text-black/60">RAM pressure</span>
+                      <span className="text-black">{data.memory.raw.pressurePercentage}%</span>
+                    </div>
+                    <div className="h-32">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={history}>
+                          <CartesianGrid strokeDasharray="4 4" stroke="#11111122" />
+                          <XAxis dataKey="time" tick={{ fontSize: 11, fill: "#444" }} minTickGap={24} axisLine={false} tickLine={false} />
+                          <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#444" }} width={30} axisLine={false} tickLine={false} />
+                          <Tooltip content={<ChartTooltip />} />
+                          <Area type="monotone" dataKey="pressure" stroke="#ff5c5c" fill="#ffebe9" strokeWidth={3} isAnimationActive={false} name="Pressure %" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </BrutBox>
+
+                  <BrutBox className="p-4">
+                    <div className="mb-2 flex items-center justify-between text-sm font-bold">
+                      <span className="uppercase text-black/60">RAM available</span>
+                      <span className="text-black">{data.memory.raw.availabilityPercentage}%</span>
+                    </div>
+                    <div className="h-32">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={history}>
+                          <CartesianGrid strokeDasharray="4 4" stroke="#11111122" />
+                          <XAxis dataKey="time" tick={{ fontSize: 11, fill: "#444" }} minTickGap={24} axisLine={false} tickLine={false} />
+                          <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#444" }} width={30} axisLine={false} tickLine={false} />
+                          <Tooltip content={<ChartTooltip />} />
+                          <Area type="monotone" dataKey="availableRam" stroke="#4ade80" fill="#dcfce7" strokeWidth={3} isAnimationActive={false} name="Available %" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </BrutBox>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2">
+                <div className="border-b-[3px] border-r-[0px] border-black p-5 md:border-r-[3px] md:p-6">
+                  <SectionTag>memory ledger</SectionTag>
+                  <div className="mt-4 border-[3px] border-black bg-white p-4">
+                    <StatLine label="Available" value={`${formatNumber(data.memory.raw.available, 2)} GB`} />
+                    <StatLine label="Used" value={`${formatNumber(data.memory.raw.used, 2)} GB`} />
+                    <StatLine label="Cached" value={`${formatNumber(data.memory.raw.cached, 2)} GB`} />
+                    <StatLine label="Free" value={`${formatNumber(data.memory.raw.free, 2)} GB`} />
+                    <StatLine label="Swap used" value={`${formatNumber(data.memory.swap.used, 2)} GB`} />
+                  </div>
+                </div>
+
+                <div className="border-b-[3px] border-black p-5 md:p-6">
+                  <SectionTag>core grid</SectionTag>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    {data.cpu.cpuUtilizationPerCore.map((core, index) => {
+                      const tone = getTone(core);
+                      return (
+                        <div key={index} className="border-[3px] border-black bg-white p-2.5">
+                          <div className="mb-2 flex items-center justify-between text-xs font-black uppercase">
+                            <span className="text-black/45">C{index + 1}</span>
+                            <span className={tone.text}>{formatNumber(core, 0)}%</span>
+                          </div>
+                          <ProgressRail value={core} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </BrutBox>
       </div>
     </div>
   );
