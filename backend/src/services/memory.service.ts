@@ -1,5 +1,6 @@
 import si from 'systeminformation';
-import {formatToGb} from '../utils/formatToGb.js';
+import fs from 'node:fs/promises';
+import { formatToGb } from '../utils/formatToGb.js';
 
 export type MemorySection = {
   total: number;
@@ -30,27 +31,52 @@ let memoryMetrics: MemoryMetrics = {
   updatedAt: new Date().toISOString(),
 };
 
+function clampBytes(value: number): number {
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function buildMemorySection(totalBytes: number, availableBytes: number): MemorySection {
+  const safeTotal = clampBytes(totalBytes);
+  const safeAvailable = Math.min(clampBytes(availableBytes), safeTotal);
+  const safeUsed = Math.max(0, safeTotal - safeAvailable);
+
+  return {
+    total: formatToGb(safeTotal),
+    available: formatToGb(safeAvailable),
+    used: formatToGb(safeUsed),
+    usagePercentage: safeTotal > 0 ? Math.round((safeUsed / safeTotal) * 100) : null,
+  };
+}
+
+async function getLinuxRawMemorySection(): Promise<MemorySection> {
+  const meminfo = await fs.readFile('/proc/meminfo', 'utf8');
+
+  const getKb = (key: string): number => {
+    const match = meminfo.match(new RegExp(`^${key}:\\s+(\\d+)\\s+kB$`, 'm'));
+    return match ? Number(match[1]) : 0;
+  };
+
+  const totalBytes = getKb('MemTotal') * 1024;
+  const freeBytes = getKb('MemFree') * 1024;
+
+  return buildMemorySection(totalBytes, freeBytes);
+}
+
 async function refreshMemoryMetrics(): Promise<void> {
   try {
-    const {
-      total: totalMemory,
-      available: availableMemory,
-      used: usedMemory,
-      swaptotal: totalSwapMemory,
-      swapfree: availableSwapMemory,
-      swapused: usedSwapMemory,
-    } = await si.mem();
+    const mem = await si.mem();
+
+    const raw =
+      process.platform === 'linux'
+        ? await getLinuxRawMemorySection()
+        : buildMemorySection(mem.total, mem.available);
+
+    const totalSwapMemory = clampBytes(mem.swaptotal);
+    const availableSwapMemory = Math.min(clampBytes(mem.swapfree), totalSwapMemory);
+    const usedSwapMemory = Math.min(clampBytes(mem.swapused), totalSwapMemory);
 
     memoryMetrics = {
-      raw: {
-        total: formatToGb(totalMemory),
-        available: formatToGb(availableMemory),
-        used: formatToGb(usedMemory),
-        usagePercentage:
-          totalMemory > 0
-            ? Math.round((usedMemory / totalMemory) * 100)
-            : null,
-      },
+      raw,
       swap: {
         total: formatToGb(totalSwapMemory),
         available: formatToGb(availableSwapMemory),
@@ -65,6 +91,7 @@ async function refreshMemoryMetrics(): Promise<void> {
   } catch (error) {
     console.error('Failed to refresh memory metrics:', error);
   }
+
 }
 
 export async function startMemoryMetricsPolling(): Promise<void> {

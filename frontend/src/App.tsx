@@ -346,7 +346,7 @@ export default function App() {
     try {
       if (showLoader) setLoading(true);
 
-      const response = await fetch("http://localhost:3001/api/metrics", {
+      const response = await fetch("http://192.168.18.205:3001/api/metrics", {
         headers: { Accept: "application/json" },
       });
 
