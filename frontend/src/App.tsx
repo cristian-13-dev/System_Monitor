@@ -87,7 +87,7 @@ type HistoryPoint = {
   throughput: number;
 };
 
-const API_URL = "http://192.168.18.205:3001/api/metrics";
+const API_URL = "http://100.93.206.41:3001/api/metrics";
 const HISTORY_LIMIT = 60;
 
 function cn(...classes: Array<string | false | null | undefined>) {
