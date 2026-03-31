@@ -7,25 +7,21 @@ import {
   Cpu,
   HardDrive,
   MemoryStick,
-  Monitor,
   Network,
   RefreshCw,
-  Router,
-  Timer,
   Wifi,
+  Monitor,
+  Server,
+  Microchip,
 } from "lucide-react";
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   Legend,
 } from "recharts";
 
@@ -90,10 +86,8 @@ type HistoryPoint = {
   time: string;
   cpu: number;
   memory: number;
-  storage: number;
   download: number;
   upload: number;
-  latency: number;
 };
 
 function cn(...classes: Array<string | false | null | undefined>) {
@@ -147,6 +141,7 @@ function getTone(value: number) {
       soft: "bg-rose-50",
       badge: "bg-rose-100 text-rose-700",
       label: "High",
+      border: "border-rose-200",
     };
   }
 
@@ -157,6 +152,7 @@ function getTone(value: number) {
       soft: "bg-amber-50",
       badge: "bg-amber-100 text-amber-700",
       label: "Medium",
+      border: "border-amber-200",
     };
   }
 
@@ -166,6 +162,7 @@ function getTone(value: number) {
     soft: "bg-sky-50",
     badge: "bg-sky-100 text-sky-700",
     label: "Good",
+    border: "border-sky-200",
   };
 }
 
@@ -181,7 +178,7 @@ const CustomTooltip = memo(function CustomTooltip({
   if (!active || !payload?.length) return null;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-xl">
+    <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-xl">
       <p className="mb-2 text-xs font-medium text-slate-500">{label}</p>
       <div className="space-y-1">
         {payload.map((entry, index) => (
@@ -209,7 +206,7 @@ const Surface = memo(function Surface({
   return (
     <div
       className={cn(
-        "rounded-3xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.05)]",
+        "rounded-2xl border border-slate-200/80 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.05)]",
         className
       )}
     >
@@ -222,18 +219,23 @@ const SectionTitle = memo(function SectionTitle({
                                                   icon,
                                                   title,
                                                   subtitle,
+                                                  action,
                                                 }: {
   icon: React.ReactNode;
   title: string;
   subtitle?: string;
+  action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-5 flex items-center gap-3">
-      <div className="rounded-2xl bg-slate-100 p-2.5 text-slate-700">{icon}</div>
-      <div>
-        <h2 className="text-base font-semibold text-slate-900 sm:text-lg">{title}</h2>
-        {subtitle && <p className="text-xs text-slate-500 sm:text-sm">{subtitle}</p>}
+    <div className="mb-5 flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <div className="rounded-xl bg-slate-100 p-2.5 text-slate-700">{icon}</div>
+        <div>
+          <h2 className="text-base font-semibold text-slate-900 sm:text-lg">{title}</h2>
+          {subtitle && <p className="text-xs text-slate-500 sm:text-sm">{subtitle}</p>}
+        </div>
       </div>
+      {action}
     </div>
   );
 });
@@ -258,12 +260,14 @@ const StatRow = memo(function StatRow({
 const Progress = memo(function Progress({
                                           value,
                                           colorClass,
+                                          heightClass = "h-2",
                                         }: {
   value: number;
   colorClass: string;
+  heightClass?: string;
 }) {
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+    <div className={cn("overflow-hidden rounded-full bg-slate-100", heightClass)}>
       <div
         className={cn("h-full rounded-full transition-[width] duration-300", colorClass)}
         style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
@@ -291,7 +295,7 @@ const HeroMetricCard = memo(function HeroMetricCard({
     <Surface className="p-4 sm:p-5">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className={cn("rounded-2xl p-3", tone.soft, tone.text)}>{icon}</div>
+          <div className={cn("rounded-xl p-3", tone.soft, tone.text)}>{icon}</div>
           <div>
             <p className="text-sm font-medium text-slate-600">{title}</p>
             <p className="text-xs text-slate-400">{sublabel}</p>
@@ -317,15 +321,17 @@ const ChartCard = memo(function ChartCard({
                                             icon,
                                             children,
                                             className,
+                                            action,
                                           }: {
   title: string;
   icon: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  action?: React.ReactNode;
 }) {
   return (
     <Surface className={cn("p-4 sm:p-5", className)}>
-      <SectionTitle icon={icon} title={title} />
+      <SectionTitle icon={icon} title={title} action={action} />
       {children}
     </Surface>
   );
@@ -336,6 +342,8 @@ export default function App() {
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uptimeDisplay, setUptimeDisplay] = useState(0);
+  const [storageUsageDisplay, setStorageUsageDisplay] = useState(0);
 
   const inFlightRef = useRef(false);
 
@@ -358,6 +366,7 @@ export default function App() {
 
       setData(result);
       setError(null);
+      setUptimeDisplay(result.system.uptime);
 
       const storageUsage =
         result.storage.totalStorageSize > 0
@@ -369,14 +378,14 @@ export default function App() {
           )
           : 0;
 
+      setStorageUsageDisplay(storageUsage);
+
       const point: HistoryPoint = {
         time: formatNow24(),
         cpu: Number(result.cpu.averageCpuUtilization ?? 0),
         memory: Number(result.memory.raw.usagePercentage ?? 0),
-        storage: storageUsage,
         download: Number(result.network.interfaces[0]?.downloadMbps ?? 0),
         upload: Number(result.network.interfaces[0]?.uploadMbps ?? 0),
-        latency: Number(result.network.interfaces[0]?.latencyMs ?? 0),
       };
 
       setHistory((prev) => [...prev.slice(-39), point]);
@@ -394,21 +403,63 @@ export default function App() {
     return () => window.clearInterval(id);
   }, [getSpecs]);
 
+  useEffect(() => {
+    if (!data) return;
+
+    setUptimeDisplay(data.system.uptime);
+
+    const id = window.setInterval(() => {
+      setUptimeDisplay((prev) => prev + 60);
+    }, 60000);
+
+    return () => window.clearInterval(id);
+  }, [data?.system.updatedAt, data]);
+
+  useEffect(() => {
+    if (!data) return;
+
+    const storageUsage =
+      data.storage.totalStorageSize > 0
+        ? Number(
+          (
+            (data.storage.usedStorageSize / data.storage.totalStorageSize) *
+            100
+          ).toFixed(2)
+        )
+        : 0;
+
+    setStorageUsageDisplay(storageUsage);
+
+    const id = window.setInterval(() => {
+      setStorageUsageDisplay(
+        data.storage.totalStorageSize > 0
+          ? Number(
+            (
+              (data.storage.usedStorageSize / data.storage.totalStorageSize) *
+              100
+            ).toFixed(2)
+          )
+          : 0
+      );
+    }, 60000);
+
+    return () => window.clearInterval(id);
+  }, [
+    data?.storage.updatedAt,
+    data?.storage.totalStorageSize,
+    data?.storage.usedStorageSize,
+    data,
+  ]);
+
   const networkPrimary = data?.network.interfaces[0];
 
   const cpuUsage = useMemo(() => data?.cpu.averageCpuUtilization ?? 0, [data]);
   const memoryUsage = useMemo(() => data?.memory.raw.usagePercentage ?? 0, [data]);
-  const storageUsage = useMemo(() => {
-    if (!data || data.storage.totalStorageSize === 0) return 0;
-    return Number(
-      ((data.storage.usedStorageSize / data.storage.totalStorageSize) * 100).toFixed(2)
-    );
-  }, [data]);
 
   if (loading && !data) {
     return (
       <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-        <div className="mx-auto max-w-[1600px]">
+        <div className="mx-auto max-w-400">
           <div className="mb-6 flex items-center gap-3">
             <RefreshCw className="animate-spin text-slate-700" size={22} />
             <h1 className="text-2xl font-bold text-slate-900">Loading dashboard...</h1>
@@ -418,7 +469,7 @@ export default function App() {
             {Array.from({ length: 8 }).map((_, index) => (
               <div
                 key={index}
-                className="h-56 animate-pulse rounded-3xl border border-slate-200 bg-white"
+                className="h-56 animate-pulse rounded-2xl border border-slate-200 bg-white"
               />
             ))}
           </div>
@@ -430,7 +481,7 @@ export default function App() {
   if (!data) {
     return (
       <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-        <div className="mx-auto max-w-4xl rounded-3xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
+        <div className="mx-auto max-w-4xl rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-700">
           {error || "No data available"}
         </div>
       </div>
@@ -439,57 +490,118 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-      <div className="mx-auto max-w-[1600px] space-y-6">
-        <Surface className="p-5 sm:p-6">
-          <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-            <div className="min-w-0">
-              <div className="mb-3 flex items-center gap-3">
-                <div className="rounded-3xl bg-slate-950 p-3 text-white shadow-sm">
-                  <Activity size={22} />
+      <div className="mx-auto max-w-400 space-y-6">
+        <Surface className="overflow-hidden">
+          <div className="border-b border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 sm:p-6">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+              <div className="min-w-0">
+                <div className="mb-3 flex items-center gap-3">
+                  <div className="rounded-2xl bg-slate-950 p-3 text-white shadow-sm">
+                    <Activity size={22} />
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="truncate text-2xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+                      System Dashboard
+                    </h1>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Device health and live performance overview
+                    </p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <h1 className="truncate text-2xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
-                    System Dashboard
-                  </h1>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Device health and performance overview
+
+                <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+                  <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                  <span>{data.system.hostname}</span>
+                  <span className="text-slate-300">•</span>
+                  <span>{data.system.platform}</span>
+                  <span className="text-slate-300">•</span>
+                  <span>{data.system.architecture}</span>
+                  <span className="text-slate-300">•</span>
+                  <span>{data.system.distro}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="rounded-xl bg-slate-50 px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    Last update
+                  </p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    {formatDate(data.system.updatedAt)}
                   </p>
                 </div>
-              </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-                <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                <span>{data.system.hostname}</span>
-                <span className="text-slate-300">•</span>
-                <span>{data.system.platform}</span>
-                <span className="text-slate-300">•</span>
-                <span>{data.system.architecture}</span>
+                <button
+                  onClick={() => getSpecs(false)}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
+                >
+                  <RefreshCw size={16} />
+                  Refresh
+                </button>
               </div>
             </div>
+          </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-                  Last update
-                </p>
-                <p className="text-sm font-semibold text-slate-900">
-                  {formatDate(data.system.updatedAt)}
-                </p>
+          <div className="grid grid-cols-1 gap-x-8 gap-y-3 p-5 sm:grid-cols-2 xl:grid-cols-3 sm:p-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+                <Monitor size={14} />
+                System
               </div>
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">Manufacturer:</span>{" "}
+                {data.system.manufacturer}
+              </p>
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">Model:</span> {data.system.model}
+              </p>
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">Release:</span>{" "}
+                {data.system.release}
+              </p>
+            </div>
 
-              <button
-                onClick={() => getSpecs(false)}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-slate-800"
-              >
-                <RefreshCw size={16} />
-                Refresh
-              </button>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+                <Server size={14} />
+                OS / Kernel
+              </div>
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">OS:</span> {data.system.distro}
+              </p>
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">Kernel:</span>{" "}
+                {data.system.kernel}
+              </p>
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">Timezone:</span>{" "}
+                {data.system.timezone}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-slate-400">
+                <Microchip size={14} />
+                Runtime
+              </div>
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">Hostname:</span>{" "}
+                {data.system.hostname}
+              </p>
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">Uptime:</span>{" "}
+                {formatUptime(uptimeDisplay)}
+              </p>
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">Updated:</span>{" "}
+                {formatTime24(data.system.updatedAt)}
+              </p>
             </div>
           </div>
         </Surface>
 
         {error && (
-          <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-rose-700">
             {error}
           </div>
         )}
@@ -514,31 +626,37 @@ export default function App() {
           <HeroMetricCard
             title="Storage"
             icon={<HardDrive size={20} />}
-            value={`${storageUsage.toFixed(0)}%`}
+            value={`${storageUsageDisplay.toFixed(0)}%`}
             sublabel="Disk occupancy"
-            usage={storageUsage}
+            usage={storageUsageDisplay}
           />
 
-          <Surface className="p-4 sm:p-5">
+          <Surface className="relative p-4 sm:p-5">
+            <div className="absolute right-4 top-4">
+              <span className="rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-white">
+                {networkPrimary?.latencyMs ?? 0} ms
+              </span>
+            </div>
+
             <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+              <div className="rounded-xl bg-slate-100 p-3 text-slate-700">
                 <Wifi size={20} />
               </div>
               <div>
                 <p className="text-sm font-medium text-slate-600">Network</p>
-                <p className="text-xs text-slate-400">Latency and transfer</p>
+                <p className="text-xs text-slate-400">Transfer and interface status</p>
               </div>
             </div>
 
             <div className="mb-4">
               <p className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-                {networkPrimary?.latencyMs ?? 0} ms
+                {networkPrimary?.speedMbps ?? 0} Mbps
               </p>
-              <p className="text-sm text-slate-500">Current latency</p>
+              <p className="text-sm text-slate-500">Interface speed</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-slate-50 p-3">
+              <div className="rounded-xl bg-slate-50 p-3">
                 <div className="mb-1 flex items-center gap-2 text-slate-500">
                   <ArrowDown size={14} />
                   <span className="text-xs">Download</span>
@@ -548,7 +666,7 @@ export default function App() {
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-slate-50 p-3">
+              <div className="rounded-xl bg-slate-50 p-3">
                 <div className="mb-1 flex items-center gap-2 text-slate-500">
                   <ArrowUp size={14} />
                   <span className="text-xs">Upload</span>
@@ -569,21 +687,21 @@ export default function App() {
           >
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={history}>
+                <AreaChart data={history}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={24} stroke="#94a3b8" />
                   <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} width={34} stroke="#94a3b8" />
                   <Tooltip content={<CustomTooltip />} />
-                  <Line
+                  <Area
                     type="monotone"
                     dataKey="cpu"
                     stroke="#0f172a"
+                    fill="#cbd5e1"
                     strokeWidth={2.5}
-                    dot={false}
                     isAnimationActive={false}
                     name="CPU %"
                   />
-                </LineChart>
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </ChartCard>
@@ -621,184 +739,153 @@ export default function App() {
           >
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={history}>
+                <AreaChart data={history}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={24} stroke="#94a3b8" />
                   <YAxis tick={{ fontSize: 11 }} width={42} stroke="#94a3b8" />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend wrapperStyle={{ fontSize: "12px" }} />
-                  <Line
+                  <Area
                     type="monotone"
                     dataKey="download"
                     stroke="#0f172a"
+                    fill="#cbd5e1"
                     strokeWidth={2.5}
-                    dot={false}
                     isAnimationActive={false}
                     name="Download"
                   />
-                  <Line
+                  <Area
                     type="monotone"
                     dataKey="upload"
                     stroke="#0ea5e9"
+                    fill="#bae6fd"
                     strokeWidth={2.5}
-                    dot={false}
                     isAnimationActive={false}
                     name="Upload"
                   />
-                </LineChart>
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </ChartCard>
         </section>
 
         <section className="grid grid-cols-1 gap-4 2xl:grid-cols-12">
-          <ChartCard
-            title="Storage Trend"
-            icon={<HardDrive size={18} />}
-            className="2xl:col-span-6"
-          >
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={history}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={24} stroke="#94a3b8" />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} width={34} stroke="#94a3b8" />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Bar
-                    dataKey="storage"
-                    fill="#0f172a"
-                    radius={[8, 8, 0, 0]}
-                    isAnimationActive={false}
-                    name="Storage %"
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </ChartCard>
-
-          <ChartCard
-            title="Latency Trend"
-            icon={<Router size={18} />}
-            className="2xl:col-span-6"
-          >
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={history}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="time" tick={{ fontSize: 11 }} minTickGap={24} stroke="#94a3b8" />
-                  <YAxis tick={{ fontSize: 11 }} width={34} stroke="#94a3b8" />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line
-                    type="monotone"
-                    dataKey="latency"
-                    stroke="#6366f1"
-                    strokeWidth={2.5}
-                    dot={false}
-                    isAnimationActive={false}
-                    name="Latency ms"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </ChartCard>
-        </section>
-
-        <section className="grid grid-cols-1 gap-4 2xl:grid-cols-3">
-          <Surface className="p-4 sm:p-5">
-            <SectionTitle
-              icon={<Monitor size={18} />}
-              title="System Details"
-              subtitle="Device and operating system"
-            />
-            <div className="divide-y divide-slate-100">
-              <StatRow label="Manufacturer" value={data.system.manufacturer} />
-              <StatRow label="Model" value={data.system.model} />
-              <StatRow label="Hostname" value={data.system.hostname} />
-              <StatRow label="Platform" value={data.system.platform} />
-              <StatRow label="OS" value={data.system.distro} />
-              <StatRow label="Release" value={data.system.release} />
-              <StatRow label="Kernel" value={data.system.kernel} />
-              <StatRow label="Architecture" value={data.system.architecture} />
-              <StatRow label="Timezone" value={data.system.timezone} />
-              <StatRow
-                label="Uptime"
-                value={
-                  <span className="inline-flex items-center gap-2">
-                    <Timer size={14} />
-                    {formatUptime(data.system.uptime)}
-                  </span>
-                }
-              />
-              <StatRow label="Updated" value={formatTime24(data.system.updatedAt)} />
-            </div>
-          </Surface>
-
-          <Surface className="p-4 sm:p-5">
+          <Surface className="p-4 sm:p-5 2xl:col-span-6">
             <SectionTitle
               icon={<Cpu size={18} />}
               title="CPU Details"
-              subtitle="Per-core live utilization"
+              subtitle="Compact per-core live utilization"
             />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {data.cpu.cpuUtilizationPerCore.map((core, index) => {
-                const tone = getTone(core);
-                return (
-                  <div key={index} className="rounded-2xl bg-slate-50 p-3">
-                    <div className="mb-2 flex items-center justify-between text-xs">
-                      <span className="font-medium text-slate-500">Core {index + 1}</span>
-                      <span className={tone.text}>{core}%</span>
-                    </div>
-                    <Progress value={core} colorClass={tone.bg} />
-                  </div>
-                );
-              })}
-            </div>
 
             <div className="mt-4 divide-y divide-slate-100">
               <StatRow label="Average Frequency" value={`${data.cpu.averageCpuFrequency} GHz`} />
-              <StatRow label="Average Temperature" value={data.cpu.averageCpuTemperature ?? "N/A"} />
+              <StatRow
+                label="Average Temperature"
+                value={
+                  data.cpu.averageCpuTemperature !== null
+                    ? `${data.cpu.averageCpuTemperature}°C`
+                    : "N/A"
+                }
+              />
               <StatRow label="Updated" value={formatTime24(data.cpu.updatedAt)} />
             </div>
           </Surface>
 
-          <Surface className="p-4 sm:p-5">
+          <Surface className="p-4 sm:p-5 2xl:col-span-3">
             <SectionTitle
-              icon={<HardDrive size={18} />}
-              title="Memory & Storage"
-              subtitle="Capacity and availability"
+              icon={<MemoryStick size={18} />}
+              title="Memory"
+              subtitle="RAM and swap utilization"
             />
 
             <div className="space-y-4">
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <h3 className="mb-2 text-sm font-semibold text-slate-900">Memory</h3>
-                <div className="divide-y divide-slate-100">
+              <div className="rounded-xl bg-slate-50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-900">RAM</h3>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                      getTone(data.memory.raw.usagePercentage).badge
+                    )}
+                  >
+                    {getTone(data.memory.raw.usagePercentage).label}
+                  </span>
+                </div>
+
+                <div className="mb-3">
+                  <p className="text-3xl font-bold tracking-tight text-slate-950">
+                    {data.memory.raw.usagePercentage}%
+                  </p>
+                  <p className="text-sm text-slate-500">Current memory usage</p>
+                </div>
+
+                <Progress
+                  value={data.memory.raw.usagePercentage}
+                  colorClass={getTone(data.memory.raw.usagePercentage).bg}
+                />
+
+                <div className="mt-4 divide-y divide-slate-100">
                   <StatRow label="Total RAM" value={`${data.memory.raw.total} GB`} />
                   <StatRow label="Used RAM" value={`${data.memory.raw.used} GB`} />
                   <StatRow label="Available RAM" value={`${data.memory.raw.available} GB`} />
-                  <StatRow label="Usage" value={`${data.memory.raw.usagePercentage}%`} />
                 </div>
               </div>
 
-              <div className="rounded-2xl bg-slate-50 p-4">
+              <div className="rounded-xl bg-slate-50 p-4">
                 <h3 className="mb-2 text-sm font-semibold text-slate-900">Swap</h3>
                 <div className="divide-y divide-slate-100">
                   <StatRow label="Total Swap" value={`${data.memory.swap.total} GB`} />
                   <StatRow label="Used Swap" value={`${data.memory.swap.used} GB`} />
                   <StatRow label="Available Swap" value={`${data.memory.swap.available} GB`} />
                   <StatRow label="Usage" value={`${data.memory.swap.usagePercentage}%`} />
+                  <StatRow label="Updated" value={formatTime24(data.memory.updatedAt)} />
                 </div>
               </div>
+            </div>
+          </Surface>
 
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <h3 className="mb-2 text-sm font-semibold text-slate-900">Storage</h3>
-                <div className="divide-y divide-slate-100">
-                  <StatRow label="Type" value={data.storage.storageType} />
-                  <StatRow label="Model" value={data.storage.storageModel || "N/A"} />
-                  <StatRow label="Total" value={`${data.storage.totalStorageSize} GB`} />
-                  <StatRow label="Used" value={`${data.storage.usedStorageSize} GB`} />
-                  <StatRow label="Available" value={`${data.storage.availableStorageSize} GB`} />
-                  <StatRow label="Updated" value={formatTime24(data.storage.updatedAt)} />
-                </div>
+          <Surface className="p-4 sm:p-5 2xl:col-span-3">
+            <SectionTitle
+              icon={<HardDrive size={18} />}
+              title="Storage"
+              subtitle="Disk capacity and availability"
+            />
+
+            <div className="rounded-xl bg-slate-50 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  {data.storage.storageType || "Storage"}
+                </h3>
+                <span
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] font-semibold",
+                    getTone(storageUsageDisplay).badge
+                  )}
+                >
+                  {getTone(storageUsageDisplay).label}
+                </span>
+              </div>
+
+              <div className="mb-3">
+                <p className="text-3xl font-bold tracking-tight text-slate-950">
+                  {storageUsageDisplay.toFixed(0)}%
+                </p>
+                <p className="text-sm text-slate-500">Current disk usage</p>
+              </div>
+
+              <Progress
+                value={storageUsageDisplay}
+                colorClass={getTone(storageUsageDisplay).bg}
+                heightClass="h-3"
+              />
+
+              <div className="mt-4 divide-y divide-slate-100">
+                <StatRow label="Type" value={data.storage.storageType} />
+                <StatRow label="Model" value={data.storage.storageModel || "N/A"} />
+                <StatRow label="Total" value={`${data.storage.totalStorageSize} GB`} />
+                <StatRow label="Used" value={`${data.storage.usedStorageSize} GB`} />
+                <StatRow label="Available" value={`${data.storage.availableStorageSize} GB`} />
+                <StatRow label="Updated" value={formatTime24(data.storage.updatedAt)} />
               </div>
             </div>
           </Surface>
