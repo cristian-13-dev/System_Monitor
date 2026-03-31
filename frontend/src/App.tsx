@@ -1,15 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
-  ArrowDown,
-  ArrowUp,
   Cpu,
   HardDrive,
   MemoryStick,
-  Monitor,
-  Network,
   RefreshCw,
-  Server,
   Wifi,
 } from "lucide-react";
 import {
