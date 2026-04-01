@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from "react";
 import {ArrowDownRight, ArrowUpRight, Gauge, TimerReset, Wifi} from "lucide-react";
 
-const API_URL = "http://192.168.18.205:3001/api/metrics";
+const API_URL = "http:/100.93.206.41:3001/api/metrics";
 const MAX_POINTS = 16;
 const SVG_WIDTH = 640;
 const SVG_HEIGHT = 320;
