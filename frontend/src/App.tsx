@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from "react";
 import {ArrowDownRight, ArrowUpRight, Gauge, TimerReset, Wifi} from "lucide-react";
 
-const API_URL = "http://100.93.206.41:3001/api/metrics";
+const API_URL = "http://localhost:3001/api/metrics";
 const MAX_POINTS = 16;
 const SVG_WIDTH = 640;
 const SVG_HEIGHT = 320;
@@ -23,7 +23,7 @@ function formatSpeed(value: number) {
 
 function formatDelay(value: number) {
   if (!Number.isFinite(value)) return "-- ms";
-  return `${value.toFixed(2)} ms`;
+  return `${Math.round(value)} ms`;
 }
 
 function formatAxisMbps(value: number) {
@@ -111,8 +111,8 @@ function getBandwidthStatus(download: number, upload: number) {
   if (combined >= 80) {
     return {
       label: "High",
-      toneClass: "text-amber-300",
-      iconTone: "text-amber-300",
+      toneClass: "text-amber-400",
+      iconTone: "text-amber-400",
     };
   }
 
@@ -123,10 +123,28 @@ function getBandwidthStatus(download: number, upload: number) {
   };
 }
 
+function getAxisLabelX(step: number, totalSteps: number, innerWidth: number) {
+  if (totalSteps <= 1) return PADDING.left;
+  return PADDING.left + (innerWidth * step) / (totalSteps - 1);
+}
+
 export default function NetworkWidget() {
   const [points, setPoints] = useState<NetworkPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 639px)");
+    const updateIsMobile = () => setIsMobile(media.matches);
+
+    updateIsMobile();
+    media.addEventListener("change", updateIsMobile);
+
+    return () => {
+      media.removeEventListener("change", updateIsMobile);
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -221,46 +239,42 @@ export default function NetworkWidget() {
   const tooltipWidth = 176;
   const tooltipHeight = 96;
   const tooltipX = Math.min(Math.max(hoverX - tooltipWidth / 2, 8), SVG_WIDTH - tooltipWidth - 8);
-  const tooltipY = Math.max(10, Math.min(Math.min(hoverDownloadY, hoverUploadY) - tooltipHeight - 14, SVG_HEIGHT - tooltipHeight - 8));
+  const tooltipY = Math.max(
+    10,
+    Math.min(Math.min(hoverDownloadY, hoverUploadY) - tooltipHeight - 14, SVG_HEIGHT - tooltipHeight - 8)
+  );
 
-  const yTicks = [0, 0.25, 0.5, 0.75, 1];
-
-  function getEvenlySpacedIndexes(totalPoints: number, visibleLabels: number) {
-    if (totalPoints <= 1) return [0];
-
-    return Array.from({length: visibleLabels}, (_, i) =>
-      Math.round((i * (totalPoints - 1)) / (visibleLabels - 1))
-    );
-  }
-
-  const desktopLabelIndexes = getEvenlySpacedIndexes(chartPoints.length, 6);
-  const mobileLabelIndexes = getEvenlySpacedIndexes(chartPoints.length, 4);
+  const yTicks = [0.2, 0.4, 0.6, 0.8, 1];
+  const axisFontSize = isMobile ? 18 : 11;
+  const axisFontFill = isMobile ? "rgba(255,255,255,0.52)" : "rgba(255,255,255,0.52)";
+  const desktopLabelCount = 7;
+  const mobileLabelCount = 4;
 
   const firstRealPoint = chartPoints.find((point) => point.timestamp);
   const startTimestamp = firstRealPoint?.timestamp ?? 0;
   const endTimestamp = latest.timestamp ?? 0;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0a0c10] p-2 text-white sm:p-6">
+    <div className="flex min-h-screen items-center justify-center bg-zinc-950/95 p-2 text-white sm:p-6">
       <div
-        className="w-full max-w-180 overflow-hidden rounded-[18px] border border-white/6 bg-[#0f1116] shadow-[0_18px_50px_rgba(0,0,0,0.42)]">
+        className="w-full max-w-[720px] overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900 shadow-[0_18px_50px_rgba(0,0,0,0.42)]">
         <div
           className="flex flex-col gap-3 border-b border-white/6 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4">
           <div className="flex items-center gap-3">
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/8 bg-white/4 text-white/85 sm:h-11 sm:w-11">
+              className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/8 bg-white/[0.04] text-white/85 sm:h-11 sm:w-11">
               <Wifi size={21}/>
             </div>
             <div>
               <div className="text-[15px] font-medium text-white/92">Network activity</div>
               <div className="mt-0.5 text-xs text-white/46">
-                Real-time download, upload and latency across the last {MAX_POINTS * 2} seconds
+                Real-time download, upload and latency data
               </div>
             </div>
           </div>
 
           <div
-            className="inline-flex items-center gap-2 self-start rounded-[10px] border border-white/8 bg-white/3 px-3 py-1.5 text-sm text-white/72 sm:self-auto">
+            className="inline-flex items-center gap-2 self-start rounded-[10px] border border-white/8 bg-white/[0.03] px-3 py-1.5 text-sm text-white/72 sm:self-auto">
             <Gauge size={14} className={bandwidthStatus.iconTone}/>
             <span>Bandwidth</span>
             <span className={`font-medium ${bandwidthStatus.toneClass}`}>{bandwidthStatus.label}</span>
@@ -270,7 +284,7 @@ export default function NetworkWidget() {
         <div className="px-2 pt-2 sm:px-4 sm:pt-4">
           <svg
             viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
-            className="h-55 w-full sm:h-85"
+            className="h-[220px] w-full sm:h-[340px]"
             fill="none"
             onMouseLeave={() => setHoveredIndex(null)}
           >
@@ -300,8 +314,9 @@ export default function NetworkWidget() {
                     y2={y}
                     stroke="rgba(255,255,255,0.08)"
                     strokeDasharray="4 7"
+                    strokeWidth={isMobile ? 2 : 1}
                   />
-                  <text x={0} y={y + 4} fontSize="11" fill="rgba(255,255,255,0.52)">
+                  <text x={0} y={y + 4} fontSize={axisFontSize} fill={axisFontFill}>
                     {formatAxisMbps(label)}
                   </text>
                 </g>
@@ -318,6 +333,7 @@ export default function NetworkWidget() {
                   y1={PADDING.top}
                   y2={SVG_HEIGHT - PADDING.bottom}
                   stroke="rgba(255,255,255,0.05)"
+                  strokeWidth={isMobile ? 2 : 1}
                 />
               );
             })}
@@ -328,15 +344,15 @@ export default function NetworkWidget() {
             <path
               d={downloadLine}
               stroke="rgba(110,135,255,0.98)"
-              strokeWidth="2"
+              strokeWidth={isMobile ? 4 : 2}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
             <path
               d={uploadLine}
               stroke="rgba(61,216,134,0.96)"
-              strokeWidth="2"
-              strokeDasharray="6 6"
+              strokeWidth={isMobile ? 4 : 2}
+              strokeDasharray={isMobile ? "12 10" : "6 6"}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -371,39 +387,48 @@ export default function NetworkWidget() {
                 />
 
                 <g transform={`translate(${tooltipX}, ${tooltipY})`}>
-                  <rect width={tooltipWidth} height={tooltipHeight} rx="12" fill="rgba(18,20,27,0.98)"
-                        stroke="rgba(255,255,255,0.08)"/>
+                  <rect
+                    width={tooltipWidth}
+                    height={tooltipHeight}
+                    rx="12"
+                    fill="rgba(18,20,27,0.52)"
+                    stroke="rgba(255,255,255,0.08)"
+                  />
                   <path
                     d={`M0,12 Q0,0 12,0 L${tooltipWidth - 12},0 Q${tooltipWidth},0 ${tooltipWidth},12 L${tooltipWidth},28 L0,28 Z`}
-                    fill="rgba(255,255,255,0.045)"/>
-                  <text x="12" y="18" fontSize="11" fontWeight="600" fill="rgba(255,255,255,0.92)">
+                    fill="rgba(255,255,255,0.045)"
+                  />
+                  <text x="12" y="18" fontSize={isMobile ? 13 : 11} fontWeight="700" fill="rgba(255,255,255,0.96)">
                     {activePoint.timestamp ? formatTickLabel(activePoint.timestamp) : "Waiting for data"}
                   </text>
 
                   <line x1="14" x2="14" y1="40" y2="52" stroke="rgba(110,135,255,1)" strokeWidth="2.5"
                         strokeLinecap="round"/>
-                  <text x="24" y="49" fontSize="11" fill="rgba(255,255,255,0.62)">
+                  <text x="24" y="49" fontSize={isMobile ? 13 : 11} fill="rgba(255,255,255,0.72)">
                     Download
                   </text>
-                  <text x={tooltipWidth - 12} y="49" textAnchor="end" fontSize="11" fill="rgba(255,255,255,0.94)">
+                  <text x={tooltipWidth - 12} y="49" textAnchor="end" fontSize={isMobile ? 13 : 11}
+                        fill="rgba(255,255,255,0.52)">
                     {formatSpeed(activePoint.download)}
                   </text>
 
                   <line x1="14" x2="14" y1="59" y2="71" stroke="rgba(61,216,134,1)" strokeWidth="2.5"
                         strokeLinecap="round"/>
-                  <text x="24" y="68" fontSize="11" fill="rgba(255,255,255,0.62)">
+                  <text x="24" y="68" fontSize={isMobile ? 13 : 11} fill="rgba(255,255,255,0.72)">
                     Upload
                   </text>
-                  <text x={tooltipWidth - 12} y="68" textAnchor="end" fontSize="11" fill="rgba(255,255,255,0.94)">
+                  <text x={tooltipWidth - 12} y="68" textAnchor="end" fontSize={isMobile ? 13 : 11}
+                        fill="rgba(255,255,255,0.52)">
                     {formatSpeed(activePoint.upload)}
                   </text>
 
                   <line x1="14" x2="14" y1="78" y2="90" stroke="rgba(251,191,36,0.95)" strokeWidth="2.5"
                         strokeLinecap="round"/>
-                  <text x="24" y="87" fontSize="11" fill="rgba(255,255,255,0.62)">
+                  <text x="24" y="87" fontSize={isMobile ? 13 : 11} fill="rgba(255,255,255,0.72)">
                     Delay
                   </text>
-                  <text x={tooltipWidth - 12} y="87" textAnchor="end" fontSize="11" fill="rgba(255,255,255,0.94)">
+                  <text x={tooltipWidth - 12} y="87" textAnchor="end" fontSize={isMobile ? 13 : 11}
+                        fill="rgba(255,255,255,0.52)">
                     {formatDelay(activePoint.delay)}
                   </text>
                 </g>
@@ -427,37 +452,37 @@ export default function NetworkWidget() {
             })}
 
             <g className="hidden sm:block">
-              {desktopLabelIndexes.map((index, labelIndex) => {
-                const x = PADDING.left + index * stepX;
+              {Array.from({length: desktopLabelCount}, (_, labelIndex) => {
+                const x = getAxisLabelX(labelIndex, desktopLabelCount, innerWidth);
                 return (
                   <text
-                    key={`desktop-label-${index}`}
+                    key={`desktop-label-${labelIndex}`}
                     x={x}
                     y={SVG_HEIGHT - 12}
-                    textAnchor={index === 0 ? "start" : index === chartPoints.length - 1 ? "end" : "middle"}
+                    textAnchor={labelIndex === 0 ? "start" : labelIndex === desktopLabelCount - 1 ? "end" : "middle"}
                     fontSize="11"
                     fill="rgba(255,255,255,0.5)"
                   >
-                    {getAxisTimeLabel(startTimestamp, endTimestamp, labelIndex, desktopLabelIndexes.length)}
+                    {getAxisTimeLabel(startTimestamp, endTimestamp, labelIndex, desktopLabelCount)}
                   </text>
                 );
               })}
             </g>
 
             <g className="sm:hidden">
-              {mobileLabelIndexes.map((index, labelIndex) => {
-                const x = PADDING.left + index * stepX;
+              {Array.from({length: mobileLabelCount}, (_, labelIndex) => {
+                const x = getAxisLabelX(labelIndex, mobileLabelCount, innerWidth);
                 return (
                   <text
-                    key={`mobile-label-${index}`}
+                    key={`mobile-label-${labelIndex}`}
                     x={x}
                     y={SVG_HEIGHT - 8}
-                    textAnchor={index === 0 ? "start" : index === chartPoints.length - 1 ? "end" : "middle"}
-                    fontSize="13"
+                    textAnchor={labelIndex === 0 ? "start" : labelIndex === mobileLabelCount - 1 ? "end" : "middle"}
+                    fontSize={18}
                     fontWeight="500"
-                    fill="rgba(255,255,255,0.66)"
+                    fill="rgba(255,255,255,0.52)"
                   >
-                    {getAxisTimeLabel(startTimestamp, endTimestamp, labelIndex, mobileLabelIndexes.length)}
+                    {getAxisTimeLabel(startTimestamp, endTimestamp, labelIndex, mobileLabelCount)}
                   </text>
                 );
               })}
@@ -465,42 +490,46 @@ export default function NetworkWidget() {
           </svg>
         </div>
 
-        <div className="grid grid-cols-3 gap-2.5 border-t border-white/6 px-2 pb-2 pt-2 sm:gap-3 sm:px-4 sm:pb-4 sm:pt-3">
-          <div className="rounded-2xl border border-white/7 bg-white/2.5 px-2.5 py-2 sm:px-3 sm:py-2.5">
+        <div
+          className="grid grid-cols-3 gap-2.5 border-t border-white/6 px-2 pb-2 pt-2 sm:gap-3 sm:px-4 sm:pb-4 sm:pt-3">
+          <div className="rounded-[16px] border border-white/7 bg-white/[0.025] px-2.5 py-2 sm:px-3 sm:py-2.5">
             <div
-              className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.12em] text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              className="flex flex-col gap-1 text-[11px] uppercase font-semibold tracking-[0.12em] text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <div className="flex items-center gap-2">
                 <ArrowDownRight size={13} className="text-[#6e87ff]"/>
                 Download
               </div>
-              <div
-                className="text-[13px] font-semibold normal-case tracking-normal text-white/94">{formatSpeed(latest.download)}</div>
+              <div className="text-[13px] font-semibold normal-case tracking-normal text-white/94">
+                {formatSpeed(latest.download)}
+              </div>
             </div>
             <div className="mt-1 hidden text-[12px] text-white/42 sm:block">Average {formatSpeed(avgDownload)}</div>
           </div>
 
-          <div className="rounded-2xl border border-white/7 bg-white/2.5 px-2.5 py-2 sm:px-3 sm:py-2.5">
+          <div className="rounded-[16px] border border-white/7 bg-white/[0.025] px-2.5 py-2 sm:px-3 sm:py-2.5">
             <div
-              className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.12em] text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              className="flex flex-col gap-1 text-[11px] uppercase font-semibold tracking-[0.12em] text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <div className="flex items-center gap-2">
                 <ArrowUpRight size={13} className="text-[#3dd886]"/>
                 Upload
               </div>
-              <div
-                className="text-[13px] font-semibold normal-case tracking-normal text-white/94">{formatSpeed(latest.upload)}</div>
+              <div className="text-[13px] font-semibold normal-case tracking-normal text-white/94">
+                {formatSpeed(latest.upload)}
+              </div>
             </div>
             <div className="mt-1 hidden text-[12px] text-white/42 sm:block">Average {formatSpeed(avgUpload)}</div>
           </div>
 
-          <div className="rounded-2xl border border-white/7 bg-white/2.5 px-2.5 py-2 sm:px-3 sm:py-2.5">
+          <div className="rounded-[16px] border border-white/7 bg-white/[0.025] px-2.5 py-2 sm:px-3 sm:py-2.5">
             <div
-              className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.12em] text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.12em] font-semibold text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <div className="flex items-center gap-2">
-                <TimerReset size={13} className="text-amber-300"/>
+                <TimerReset size={13} className="text-amber-400"/>
                 Latency
               </div>
-              <div
-                className="text-[13px] font-semibold normal-case tracking-normal text-white/94">{formatDelay(avgDelay)}</div>
+              <div className="text-[13px] font-semibold normal-case tracking-normal text-white/94">
+                {formatDelay(avgDelay)}
+              </div>
             </div>
             <div className="mt-1 hidden text-[12px] text-white/42 sm:block">Average response</div>
           </div>
