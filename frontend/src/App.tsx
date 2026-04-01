@@ -22,8 +22,8 @@ function formatSpeed(value: number) {
 }
 
 function formatDelay(value: number) {
-  if (!Number.isFinite(value)) return "-- Mbps";
-  return `${value.toFixed(2)} Mbps`;
+  if (!Number.isFinite(value)) return "-- ms";
+  return `${value.toFixed(2)} ms`;
 }
 
 function formatAxisMbps(value: number) {
