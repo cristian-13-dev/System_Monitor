@@ -1,7 +1,7 @@
 import {useEffect, useMemo, useState} from "react";
 import {ArrowDownRight, ArrowUpRight, Gauge, TimerReset, Wifi} from "lucide-react";
 
-const API_URL = "http://localhost:3001/api/metrics";
+const API_URL = "http://100.93.206.41:3001/api/metrics";
 const MAX_POINTS = 16;
 const SVG_WIDTH = 640;
 const SVG_HEIGHT = 320;
@@ -257,12 +257,12 @@ export default function NetworkWidget() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-950/95 p-2 text-white sm:p-6">
       <div
-        className="w-full max-w-[720px] overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900 shadow-[0_18px_50px_rgba(0,0,0,0.42)]">
+        className="w-full max-w-180 overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900 shadow-[0_18px_50px_rgba(0,0,0,0.42)]">
         <div
           className="flex flex-col gap-3 border-b border-white/6 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4">
           <div className="flex items-center gap-3">
             <div
-              className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/8 bg-white/[0.04] text-white/85 sm:h-11 sm:w-11">
+              className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/8 bg-white/4 text-white/85 sm:h-11 sm:w-11">
               <Wifi size={21}/>
             </div>
             <div>
@@ -274,7 +274,7 @@ export default function NetworkWidget() {
           </div>
 
           <div
-            className="inline-flex items-center gap-2 self-start rounded-[10px] border border-white/8 bg-white/[0.03] px-3 py-1.5 text-sm text-white/72 sm:self-auto">
+            className="inline-flex items-center gap-2 self-start rounded-[10px] border border-white/8 bg-white/3 px-3 py-1.5 text-sm text-white/72 sm:self-auto">
             <Gauge size={14} className={bandwidthStatus.iconTone}/>
             <span>Bandwidth</span>
             <span className={`font-medium ${bandwidthStatus.toneClass}`}>{bandwidthStatus.label}</span>
@@ -284,7 +284,7 @@ export default function NetworkWidget() {
         <div className="px-2 pt-2 sm:px-4 sm:pt-4">
           <svg
             viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
-            className="h-[220px] w-full sm:h-[340px]"
+            className="h-55 w-full sm:h-85"
             fill="none"
             onMouseLeave={() => setHoveredIndex(null)}
           >
@@ -492,7 +492,7 @@ export default function NetworkWidget() {
 
         <div
           className="grid grid-cols-3 gap-2.5 border-t border-white/6 px-2 pb-2 pt-2 sm:gap-3 sm:px-4 sm:pb-4 sm:pt-3">
-          <div className="rounded-[16px] border border-white/7 bg-white/[0.025] px-2.5 py-2 sm:px-3 sm:py-2.5">
+          <div className="rounded-2xl border border-white/7 bg-white/2.5 px-2.5 py-2 sm:px-3 sm:py-2.5">
             <div
               className="flex flex-col gap-1 text-[11px] uppercase font-semibold tracking-[0.12em] text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <div className="flex items-center gap-2">
@@ -506,7 +506,7 @@ export default function NetworkWidget() {
             <div className="mt-1 hidden text-[12px] text-white/42 sm:block">Average {formatSpeed(avgDownload)}</div>
           </div>
 
-          <div className="rounded-[16px] border border-white/7 bg-white/[0.025] px-2.5 py-2 sm:px-3 sm:py-2.5">
+          <div className="rounded-2xl border border-white/7 bg-white/2.5 px-2.5 py-2 sm:px-3 sm:py-2.5">
             <div
               className="flex flex-col gap-1 text-[11px] uppercase font-semibold tracking-[0.12em] text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <div className="flex items-center gap-2">
@@ -520,7 +520,7 @@ export default function NetworkWidget() {
             <div className="mt-1 hidden text-[12px] text-white/42 sm:block">Average {formatSpeed(avgUpload)}</div>
           </div>
 
-          <div className="rounded-[16px] border border-white/7 bg-white/[0.025] px-2.5 py-2 sm:px-3 sm:py-2.5">
+          <div className="rounded-2xl border border-white/7 bg-white/2.5 px-2.5 py-2 sm:px-3 sm:py-2.5">
             <div
               className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.12em] font-semibold text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
               <div className="flex items-center gap-2">
