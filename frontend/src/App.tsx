@@ -1,681 +1,512 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Activity,
-  Cpu,
-  HardDrive,
-  MemoryStick,
-  RefreshCw,
-  Wifi,
-} from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import {useEffect, useMemo, useState} from "react";
+import {ArrowDownRight, ArrowUpRight, Gauge, TimerReset, Wifi} from "lucide-react";
 
-type MetricsResponse = {
-  system: {
-    manufacturer: string;
-    model: string;
-    hostname: string;
-    platform: string;
-    distro: string;
-    release: string;
-    kernel: string;
-    architecture: string;
-    timezone: string;
-    uptime: number;
-    updatedAt: string;
-  };
-  cpu: {
-    cpuUtilizationPerCore: number[];
-    averageCpuUtilization: number;
-    averageCpuFrequency: number;
-    averageCpuTemperature: number | null;
-    updatedAt: string;
-  };
-  memory: {
-    raw: {
-      total: number;
-      available: number;
-      used: number;
-      free: number;
-      cached: number;
-      usagePercentage?: number | null;
-      pressurePercentage: number;
-      availabilityPercentage: number;
-    };
-    swap: {
-      total: number;
-      available: number;
-      used: number;
-      usagePercentage: number | null;
-    };
-    updatedAt: string;
-  };
-  storage: {
-    storageModel: string;
-    storageType: string;
-    totalStorageSize: number;
-    usedStorageSize: number;
-    availableStorageSize: number;
-    updatedAt: string;
-  };
-  network: {
-    interfaces: {
-      networkInterface: string;
-      ipAddress: string;
-      speedMbps: number | null;
-      currentThroughputMbps?: number;
-      downloadMbps: number;
-      uploadMbps: number;
-      latencyMs: number;
-    }[];
-    updatedAt: string;
-  };
+const API_URL = "http://localhost:3001/api/metrics";
+const MAX_POINTS = 16;
+const SVG_WIDTH = 640;
+const SVG_HEIGHT = 320;
+const PADDING = {top: 12, right: 18, bottom: 28, left: 22};
+
+type NetworkPoint = {
+  timestamp: number;
+  download: number;
+  upload: number;
+  delay: number;
 };
 
-type HistoryPoint = {
-  time: string;
-  cpu: number;
-  availableRam: number;
-  pressure: number;
-  throughput: number;
-};
-
-const API_URL = "http://100.93.206.41:3001/api/metrics";
-const HISTORY_LIMIT = 60;
-
-function cn(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(" ");
+function formatSpeed(value: number) {
+  if (!Number.isFinite(value)) return "--";
+  if (value >= 100) return `${value.toFixed(0)} Mbps`;
+  if (value >= 10) return `${value.toFixed(1)} Mbps`;
+  return `${value.toFixed(2)} Mbps`;
 }
 
-function formatNumber(value: number, digits = 2) {
-  return Number.isFinite(value) ? value.toFixed(digits) : "0.00";
+function formatDelay(value: number) {
+  if (!Number.isFinite(value)) return "-- Mbps";
+  return `${value.toFixed(2)} Mbps`;
 }
 
-function formatTime(value: string) {
-  return new Date(value).toLocaleTimeString("ro-RO", {
-    hour12: false,
+function formatAxisMbps(value: number) {
+  return `${Math.round(value)} Mbps`;
+}
+
+function formatTickLabel(timestamp: number) {
+  if (!timestamp) return "--:--:--";
+  return new Date(timestamp).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hour12: false,
   });
 }
 
-function nowLabel() {
-  return new Date().toLocaleTimeString("ro-RO", {
-    hour12: false,
+function getAxisTimeLabel(startTimestamp: number, endTimestamp: number, step: number, totalSteps: number) {
+  if (!startTimestamp || !endTimestamp || totalSteps <= 1) return "--:--:--";
+
+  const interpolated =
+    startTimestamp + ((endTimestamp - startTimestamp) * step) / (totalSteps - 1);
+
+  return new Date(interpolated).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hour12: false,
   });
 }
 
-function formatUptime(seconds: number) {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
+function getMetric(payload: any): NetworkPoint {
+  const network = payload?.network?.interfaces?.[0] ?? {};
+  const timestamp = payload?.network?.updatedAt ?? payload?.system?.updatedAt ?? Date.now();
 
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  return `${hours}h ${minutes}m`;
-}
-
-function getTone(value: number, mode: "load" | "available" = "load") {
-  if (mode === "available") {
-    if (value <= 10) {
-      return {
-        label: "critical",
-        bg: "bg-[#ff5c5c]",
-        text: "text-[#ff5c5c]",
-        soft: "bg-[#ffebe9]",
-        border: "border-black",
-      };
-    }
-    if (value <= 25) {
-      return {
-        label: "watch",
-        bg: "bg-[#ffd84d]",
-        text: "text-[#8a6200]",
-        soft: "bg-[#fff6cf]",
-        border: "border-black",
-      };
-    }
-    return {
-      label: "healthy",
-      bg: "bg-[#4ade80]",
-      text: "text-[#166534]",
-      soft: "bg-[#dcfce7]",
-      border: "border-black",
-    };
-  }
-
-  if (value >= 85) {
-    return {
-      label: "critical",
-      bg: "bg-[#ff5c5c]",
-      text: "text-[#ff5c5c]",
-      soft: "bg-[#ffebe9]",
-      border: "border-black",
-    };
-  }
-  if (value >= 65) {
-    return {
-      label: "watch",
-      bg: "bg-[#ffd84d]",
-      text: "text-[#8a6200]",
-      soft: "bg-[#fff6cf]",
-      border: "border-black",
-    };
-  }
   return {
-    label: "stable",
-    bg: "bg-[#5b8cff]",
-    text: "text-[#2143a6]",
-    soft: "bg-[#e8efff]",
-    border: "border-black",
+    timestamp: new Date(timestamp).getTime(),
+    download: Number(network.downloadMbps ?? 0),
+    upload: Number(network.uploadMbps ?? 0),
+    delay: Number(network.latencyMs ?? 0),
   };
 }
 
-function BrutBox({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div
-      className={cn(
-        "border-[3px] border-black bg-white shadow-[8px_8px_0px_#000]",
-        className
-      )}
-    >
-      {children}
-    </div>
-  );
+function buildLinePath(values: number[], maxValue: number, width: number, height: number) {
+  const innerWidth = width - PADDING.left - PADDING.right;
+  const innerHeight = height - PADDING.top - PADDING.bottom;
+  const stepX = values.length > 1 ? innerWidth / (values.length - 1) : 0;
+
+  return values
+    .map((value, index) => {
+      const x = PADDING.left + index * stepX;
+      const y = PADDING.top + innerHeight - (value / maxValue) * innerHeight;
+      return `${index === 0 ? "M" : "L"}${x},${y}`;
+    })
+    .join(" ");
 }
 
-function SectionTag({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex border-2 border-black bg-black px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-white">
-      {children}
-    </span>
-  );
+function buildAreaPath(values: number[], maxValue: number, width: number, height: number) {
+  const innerWidth = width - PADDING.left - PADDING.right;
+  const innerHeight = height - PADDING.top - PADDING.bottom;
+  const stepX = values.length > 1 ? innerWidth / (values.length - 1) : 0;
+  const baseY = PADDING.top + innerHeight;
+
+  const line = values
+    .map((value, index) => {
+      const x = PADDING.left + index * stepX;
+      const y = PADDING.top + innerHeight - (value / maxValue) * innerHeight;
+      return `${index === 0 ? "M" : "L"}${x},${y}`;
+    })
+    .join(" ");
+
+  return `${line} L${PADDING.left + innerWidth},${baseY} L${PADDING.left},${baseY} Z`;
 }
 
-function ProgressRail({
-                        value,
-                        mode = "load",
-                      }: {
-  value: number;
-  mode?: "load" | "available";
-}) {
-  const tone = getTone(value, mode);
+function getBandwidthStatus(download: number, upload: number) {
+  const combined = download + upload;
 
-  return (
-    <div className="h-4 w-full border-2 border-black bg-white">
-      <div
-        className={cn("h-full transition-[width] duration-300", tone.bg)}
-        style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
-      />
-    </div>
-  );
+  if (combined >= 120) {
+    return {
+      label: "Very High",
+      toneClass: "text-red-300",
+      iconTone: "text-red-300",
+    };
+  }
+
+  if (combined >= 80) {
+    return {
+      label: "High",
+      toneClass: "text-amber-300",
+      iconTone: "text-amber-300",
+    };
+  }
+
+  return {
+    label: "Low",
+    toneClass: "text-[#3dd886]",
+    iconTone: "text-[#3dd886]",
+  };
 }
 
-function StatLine({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b-2 border-dashed border-black/15 py-3 last:border-b-0">
-      <span className="text-sm font-medium uppercase tracking-wide text-black/55">{label}</span>
-      <span className="max-w-[60%] text-right text-sm font-bold text-black">{value}</span>
-    </div>
-  );
-}
-
-function MetricStrip({
-                       title,
-                       value,
-                       subtitle,
-                       meterValue,
-                       mode = "load",
-                       icon,
-                       accentClass,
-                       aside,
-                     }: {
-  title: string;
-  value: string;
-  subtitle: string;
-  meterValue: number;
-  mode?: "load" | "available";
-  icon: React.ReactNode;
-  accentClass: string;
-  aside?: React.ReactNode;
-}) {
-  const tone = getTone(meterValue, mode);
-
-  return (
-    <div className="border-b-[3px] border-black last:border-b-0">
-      <div className="grid grid-cols-1 gap-5 px-5 py-5 lg:grid-cols-[1.3fr_0.7fr] lg:px-6">
-        <div className="flex items-start gap-4">
-          <div className={cn("flex h-14 w-14 shrink-0 items-center justify-center border-[3px] border-black", accentClass)}>
-            {icon}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="mb-2 flex flex-wrap items-center gap-3">
-              <h2 className="text-xl font-black uppercase tracking-tight text-black">{title}</h2>
-              <span className={cn("text-xs font-black uppercase tracking-[0.18em]", tone.text)}>
-                {tone.label}
-              </span>
-            </div>
-            <p className="text-5xl font-black leading-none tracking-tight text-black">{value}</p>
-            <p className="mt-2 text-sm font-medium text-black/60">{subtitle}</p>
-          </div>
-        </div>
-
-        <div className="flex flex-col justify-between gap-3">{aside}</div>
-      </div>
-      <div className="px-5 pb-5 lg:px-6">
-        <ProgressRail value={meterValue} mode={mode} />
-      </div>
-    </div>
-  );
-}
-
-function ChartTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
-
-  return (
-    <div className="border-[3px] border-black bg-white px-3 py-2 shadow-[6px_6px_0px_#000]">
-      <p className="mb-2 text-xs font-black uppercase tracking-wide text-black/60">{label}</p>
-      <div className="space-y-1.5">
-        {payload.map((entry: any, index: number) => (
-          <div key={`${entry.name}-${index}`} className="flex items-center gap-2 text-xs">
-            <span className="h-2.5 w-2.5 border border-black" style={{ backgroundColor: entry.color }} />
-            <span className="font-medium text-black/60">{entry.name}</span>
-            <span className="font-black text-black">{entry.value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export default function App() {
-  const [data, setData] = useState<MetricsResponse | null>(null);
-  const [history, setHistory] = useState<HistoryPoint[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function NetworkWidget() {
+  const [points, setPoints] = useState<NetworkPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [uptimeDisplay, setUptimeDisplay] = useState(0);
-  const inFlightRef = useRef(false);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const fetchMetrics = useCallback(async (showLoader = false) => {
-    if (inFlightRef.current) return;
-    inFlightRef.current = true;
+  useEffect(() => {
+    let mounted = true;
 
-    try {
-      if (showLoader) setLoading(true);
+    const fetchMetrics = async () => {
+      try {
+        const response = await fetch(API_URL);
+        if (!response.ok) throw new Error(`Request failed: ${response.status}`);
 
-      const response = await fetch(API_URL, {
-        headers: { Accept: "application/json" },
-      });
+        const payload = await response.json();
+        const metric = getMetric(payload);
 
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+        if (!mounted) return;
+
+        setPoints((prev) => [...prev, metric].slice(-MAX_POINTS));
+        setError(null);
+      } catch (err) {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : "Failed to load metrics");
       }
+    };
 
-      const result: MetricsResponse = await response.json();
-      setData(result);
-      setUptimeDisplay(result.system.uptime);
-      setError(null);
+    fetchMetrics();
+    const interval = window.setInterval(fetchMetrics, 2000);
 
-      const primary = result.network.interfaces[0];
-      const throughput =
-        primary?.currentThroughputMbps ??
-        Number(((primary?.downloadMbps ?? 0) + (primary?.uploadMbps ?? 0)).toFixed(2));
-
-      setHistory((prev) => [
-        ...prev.slice(-(HISTORY_LIMIT - 1)),
-        {
-          time: nowLabel(),
-          cpu: Number(result.cpu.averageCpuUtilization ?? 0),
-          availableRam: Number(result.memory.raw.availabilityPercentage ?? 0),
-          pressure: Number(result.memory.raw.pressurePercentage ?? 0),
-          throughput,
-        },
-      ]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      if (showLoader) setLoading(false);
-      inFlightRef.current = false;
-    }
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+    };
   }, []);
 
-  useEffect(() => {
-    fetchMetrics(true);
-    const id = window.setInterval(() => fetchMetrics(false), 2000);
-    return () => window.clearInterval(id);
-  }, [fetchMetrics]);
+  const chartPoints = useMemo(() => {
+    if (!points.length) {
+      return Array.from({length: MAX_POINTS}, (_, index) => ({
+        timestamp: 0,
+        download: 0,
+        upload: 0,
+        delay: 0,
+        index,
+      }));
+    }
 
-  useEffect(() => {
-    if (!data) return;
-    setUptimeDisplay(data.system.uptime);
+    const padded = [...points];
+    while (padded.length < MAX_POINTS) {
+      padded.unshift({timestamp: 0, download: 0, upload: 0, delay: 0});
+    }
 
-    const id = window.setInterval(() => {
-      setUptimeDisplay((prev) => prev + 60);
-    }, 60000);
+    return padded.map((point, index) => ({...point, index}));
+  }, [points]);
 
-    return () => window.clearInterval(id);
-  }, [data?.system.updatedAt]);
+  const latest = chartPoints[chartPoints.length - 1];
+  const activeIndex = hoveredIndex ?? chartPoints.length - 1;
+  const activePoint = chartPoints[activeIndex];
+  const isHovering = hoveredIndex !== null;
+  const bandwidthStatus = getBandwidthStatus(latest.download, latest.upload);
 
-  const primaryInterface = data?.network.interfaces[0];
+  const maxValue = useMemo(() => {
+    const values = chartPoints.flatMap((point) => [point.download, point.upload]);
+    return Math.max(2, ...values, 10);
+  }, [chartPoints]);
 
-  const throughput = useMemo(() => {
-    if (!primaryInterface) return 0;
-    return (
-      primaryInterface.currentThroughputMbps ??
-      Number(((primaryInterface.downloadMbps ?? 0) + (primaryInterface.uploadMbps ?? 0)).toFixed(2))
-    );
-  }, [primaryInterface]);
+  const avgDownload = useMemo(() => {
+    if (!points.length) return 0;
+    return points.reduce((sum, point) => sum + point.download, 0) / points.length;
+  }, [points]);
 
-  const storageUsage = useMemo(() => {
-    if (!data || data.storage.totalStorageSize <= 0) return 0;
-    return Number(
-      ((data.storage.usedStorageSize / data.storage.totalStorageSize) * 100).toFixed(0)
-    );
-  }, [data]);
+  const avgUpload = useMemo(() => {
+    if (!points.length) return 0;
+    return points.reduce((sum, point) => sum + point.upload, 0) / points.length;
+  }, [points]);
 
-  if (loading && !data) {
-    return (
-      <div className="min-h-screen bg-[#f2efe8] px-4 py-6 sm:px-6">
-        <div className="mx-auto max-w-[1700px] space-y-4 animate-pulse">
-          <div className="h-28 border-[3px] border-black bg-[#fff8dc]" />
-          <div className="h-[720px] border-[3px] border-black bg-white" />
-        </div>
-      </div>
+  const avgDelay = useMemo(() => {
+    if (!points.length) return 0;
+    return points.reduce((sum, point) => sum + point.delay, 0) / points.length;
+  }, [points]);
+
+  const innerWidth = SVG_WIDTH - PADDING.left - PADDING.right;
+  const innerHeight = SVG_HEIGHT - PADDING.top - PADDING.bottom;
+  const stepX = chartPoints.length > 1 ? innerWidth / (chartPoints.length - 1) : 0;
+
+  const downloadValues = chartPoints.map((point) => point.download);
+  const uploadValues = chartPoints.map((point) => point.upload);
+
+  const downloadLine = buildLinePath(downloadValues, maxValue, SVG_WIDTH, SVG_HEIGHT);
+  const downloadArea = buildAreaPath(downloadValues, maxValue, SVG_WIDTH, SVG_HEIGHT);
+  const uploadLine = buildLinePath(uploadValues, maxValue, SVG_WIDTH, SVG_HEIGHT);
+  const uploadArea = buildAreaPath(uploadValues, maxValue, SVG_WIDTH, SVG_HEIGHT);
+
+  const hoverX = PADDING.left + activeIndex * stepX;
+  const hoverDownloadY = PADDING.top + innerHeight - (activePoint.download / maxValue) * innerHeight;
+  const hoverUploadY = PADDING.top + innerHeight - (activePoint.upload / maxValue) * innerHeight;
+  const tooltipWidth = 176;
+  const tooltipHeight = 96;
+  const tooltipX = Math.min(Math.max(hoverX - tooltipWidth / 2, 8), SVG_WIDTH - tooltipWidth - 8);
+  const tooltipY = Math.max(10, Math.min(Math.min(hoverDownloadY, hoverUploadY) - tooltipHeight - 14, SVG_HEIGHT - tooltipHeight - 8));
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1];
+
+  function getEvenlySpacedIndexes(totalPoints: number, visibleLabels: number) {
+    if (totalPoints <= 1) return [0];
+
+    return Array.from({length: visibleLabels}, (_, i) =>
+      Math.round((i * (totalPoints - 1)) / (visibleLabels - 1))
     );
   }
 
-  if (!data) {
-    return (
-      <div className="min-h-screen bg-[#f2efe8] px-4 py-6 sm:px-6">
-        <div className="mx-auto max-w-4xl border-[3px] border-black bg-[#ffebe9] p-6 shadow-[8px_8px_0px_#000]">
-          <p className="text-base font-bold text-black">{error || "No data available"}</p>
-        </div>
-      </div>
-    );
-  }
+  const desktopLabelIndexes = getEvenlySpacedIndexes(chartPoints.length, 6);
+  const mobileLabelIndexes = getEvenlySpacedIndexes(chartPoints.length, 4);
 
-  const cpuTone = getTone(data.cpu.averageCpuUtilization);
-  const memoryAvailableTone = getTone(data.memory.raw.availabilityPercentage, "available");
-  const memoryPressureTone = getTone(data.memory.raw.pressurePercentage, "load");
-  const storageTone = getTone(storageUsage);
+  const firstRealPoint = chartPoints.find((point) => point.timestamp);
+  const startTimestamp = firstRealPoint?.timestamp ?? 0;
+  const endTimestamp = latest.timestamp ?? 0;
 
   return (
-    <div className="min-h-screen bg-[#f2efe8] bg-[radial-gradient(circle_at_top_left,#fff7c8_0%,transparent_28%),radial-gradient(circle_at_top_right,#dbeafe_0%,transparent_24%)] px-4 py-5 sm:px-6">
-      <div className="mx-auto max-w-[1700px] space-y-5">
-        <BrutBox className="overflow-hidden">
-          <div className="border-b-[3px] border-black bg-[#ffe16a] px-5 py-5 lg:px-6">
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-              <div>
-                <div className="mb-3 flex items-center gap-3">
-                  <div className="flex h-14 w-14 items-center justify-center border-[3px] border-black bg-white text-black">
-                    <Activity size={22} />
-                  </div>
-                  <div>
-                    <SectionTag>server monitor</SectionTag>
-                    <h1 className="mt-2 text-3xl font-black uppercase tracking-tight text-black sm:text-5xl">
-                      Brutalist runtime board
-                    </h1>
-                  </div>
-                </div>
-                <p className="max-w-3xl text-sm font-medium text-black/70">
-                  A semi-minimalist neobrutalist dashboard focused on signal clarity, system pressure and live behavior.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:min-w-[760px]">
-                <div className="border-[3px] border-black bg-white px-3 py-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/55">uptime</p>
-                  <p className="mt-2 text-lg font-black text-black">{formatUptime(uptimeDisplay)}</p>
-                </div>
-                <div className="border-[3px] border-black bg-white px-3 py-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/55">latency</p>
-                  <p className="mt-2 text-lg font-black text-black">{formatNumber(primaryInterface?.latencyMs ?? 0, 1)} ms</p>
-                </div>
-                <div className="border-[3px] border-black bg-white px-3 py-3">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black/55">updated</p>
-                  <p className="mt-2 text-lg font-black text-black">{formatTime(data.system.updatedAt)}</p>
-                </div>
-                <button
-                  onClick={() => fetchMetrics(false)}
-                  className="flex items-center justify-center gap-2 border-[3px] border-black bg-black px-4 py-3 text-sm font-black uppercase tracking-wide text-white transition hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none shadow-[4px_4px_0px_#000]"
-                >
-                  <RefreshCw size={15} />
-                  Refresh
-                </button>
+    <div className="flex min-h-screen items-center justify-center bg-[#0a0c10] p-2 text-white sm:p-6">
+      <div
+        className="w-full max-w-180 overflow-hidden rounded-[18px] border border-white/6 bg-[#0f1116] shadow-[0_18px_50px_rgba(0,0,0,0.42)]">
+        <div
+          className="flex flex-col gap-3 border-b border-white/6 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-4">
+          <div className="flex items-center gap-3">
+            <div
+              className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/8 bg-white/4 text-white/85 sm:h-11 sm:w-11">
+              <Wifi size={21}/>
+            </div>
+            <div>
+              <div className="text-[15px] font-medium text-white/92">Network activity</div>
+              <div className="mt-0.5 text-xs text-white/46">
+                Real-time download, upload and latency across the last {MAX_POINTS * 2} seconds
               </div>
             </div>
           </div>
 
-          {error && (
-            <div className="border-b-[3px] border-black bg-[#ffebe9] px-5 py-3 text-sm font-bold text-black lg:px-6">
-              {error}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 xl:grid-cols-[1.12fr_0.88fr]">
-            <section className="border-r-[3px] border-black">
-              <MetricStrip
-                title="CPU"
-                value={`${formatNumber(data.cpu.averageCpuUtilization, 1)}%`}
-                subtitle={`Average load · ${formatNumber(data.cpu.averageCpuFrequency, 1)} GHz`}
-                meterValue={data.cpu.averageCpuUtilization}
-                icon={<Cpu size={20} />}
-                accentClass="bg-[#dbeafe] text-black"
-                aside={
-                  <div className="space-y-3 border-[3px] border-black bg-white p-3">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">status</p>
-                      <p className={cn("mt-2 text-sm font-black uppercase", cpuTone.text)}>{cpuTone.label}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">temperature</p>
-                      <p className="mt-2 text-sm font-black text-black">
-                        {data.cpu.averageCpuTemperature !== null ? `${data.cpu.averageCpuTemperature}°C` : "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                }
-              />
-
-              <MetricStrip
-                title="MEMORY"
-                value={`${formatNumber(data.memory.raw.pressurePercentage, 0)}%`}
-                subtitle={`${formatNumber(data.memory.raw.used, 2)} GB in pressure · ${formatNumber(data.memory.raw.available, 2)} GB still available`}
-                meterValue={data.memory.raw.pressurePercentage}
-                icon={<MemoryStick size={20} />}
-                accentClass="bg-[#dcfce7] text-black"
-                aside={
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="border-[3px] border-black bg-[#fff6cf] p-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">memory pressure</p>
-                      <p className={cn("mt-2 text-2xl font-black", memoryPressureTone.text)}>
-                        {data.memory.raw.pressurePercentage}%
-                      </p>
-                      <p className="mt-1 text-xs font-bold text-black/65">how full RAM effectively feels</p>
-                    </div>
-                    <div className="border-[3px] border-black bg-[#dcfce7] p-3">
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">available RAM</p>
-                      <p className={cn("mt-2 text-2xl font-black", memoryAvailableTone.text)}>
-                        {data.memory.raw.availabilityPercentage}%
-                      </p>
-                      <p className="mt-1 text-xs font-bold text-black/65">usable headroom before stress</p>
-                    </div>
-                  </div>
-                }
-              />
-
-              <MetricStrip
-                title="STORAGE"
-                value={`${storageUsage}%`}
-                subtitle={`${formatNumber(data.storage.usedStorageSize, 2)} GB used of ${formatNumber(data.storage.totalStorageSize, 2)} GB`}
-                meterValue={storageUsage}
-                icon={<HardDrive size={20} />}
-                accentClass="bg-[#f3e8ff] text-black"
-                aside={
-                  <div className="space-y-3 border-[3px] border-black bg-white p-3">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">type</p>
-                      <p className="mt-2 text-sm font-black text-black">{data.storage.storageType}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">status</p>
-                      <p className={cn("mt-2 text-sm font-black uppercase", storageTone.text)}>{storageTone.label}</p>
-                    </div>
-                  </div>
-                }
-              />
-
-              <MetricStrip
-                title="NETWORK"
-                value={`${formatNumber(throughput, 2)} Mbps`}
-                subtitle="Live throughput across the primary interface"
-                meterValue={Math.min(100, throughput)}
-                icon={<Wifi size={20} />}
-                accentClass="bg-[#ffe4e6] text-black"
-                aside={
-                  <div className="space-y-3 border-[3px] border-black bg-white p-3">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">interface</p>
-                      <p className="mt-2 text-sm font-black text-black">{primaryInterface?.networkInterface ?? "N/A"}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-black/55">link</p>
-                      <p className="mt-2 text-sm font-black text-black">
-                        {primaryInterface?.speedMbps ? `${formatNumber(primaryInterface.speedMbps, 0)} Mbps` : "N/A"}
-                      </p>
-                    </div>
-                  </div>
-                }
-              />
-
-              <div className="grid grid-cols-1 lg:grid-cols-2">
-                <div className="border-t-[3px] border-r-[0px] border-black p-5 lg:border-r-[3px] lg:p-6">
-                  <SectionTag>system</SectionTag>
-                  <div className="mt-4 space-y-2 text-sm font-bold text-black">
-                    <p><span className="text-black/50">Manufacturer</span> · {data.system.manufacturer}</p>
-                    <p><span className="text-black/50">Model</span> · {data.system.model}</p>
-                    <p><span className="text-black/50">Release</span> · {data.system.release}</p>
-                    <p><span className="text-black/50">Kernel</span> · {data.system.kernel}</p>
-                    <p><span className="text-black/50">Timezone</span> · {data.system.timezone}</p>
-                  </div>
-                </div>
-
-                <div className="border-t-[3px] border-black p-5 lg:p-6">
-                  <SectionTag>network route</SectionTag>
-                  <div className="mt-4 space-y-2 text-sm font-bold text-black">
-                    <p><span className="text-black/50">Interface</span> · {primaryInterface?.networkInterface ?? "N/A"}</p>
-                    <p><span className="text-black/50">IP</span> · {primaryInterface?.ipAddress ?? "N/A"}</p>
-                    <p><span className="text-black/50">Download</span> · {formatNumber(primaryInterface?.downloadMbps ?? 0, 2)} Mbps</p>
-                    <p><span className="text-black/50">Upload</span> · {formatNumber(primaryInterface?.uploadMbps ?? 0, 2)} Mbps</p>
-                    <p><span className="text-black/50">Latency</span> · {formatNumber(primaryInterface?.latencyMs ?? 0, 1)} ms</p>
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <aside className="grid grid-cols-1 bg-[#f8f5ee]">
-              <div className="border-b-[3px] border-black p-5 lg:p-6">
-                <SectionTag>history</SectionTag>
-                <div className="mt-5 space-y-5">
-                  <BrutBox className="p-4">
-                    <div className="mb-2 flex items-center justify-between text-sm font-bold">
-                      <span className="uppercase text-black/60">CPU load</span>
-                      <span className="text-black">{formatNumber(data.cpu.averageCpuUtilization, 1)}%</span>
-                    </div>
-                    <div className="h-32">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={history}>
-                          <CartesianGrid strokeDasharray="4 4" stroke="#11111122" />
-                          <XAxis dataKey="time" tick={{ fontSize: 11, fill: "#444" }} minTickGap={24} axisLine={false} tickLine={false} />
-                          <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#444" }} width={30} axisLine={false} tickLine={false} />
-                          <Tooltip content={<ChartTooltip />} />
-                          <Area type="monotone" dataKey="cpu" stroke="#5b8cff" fill="#dbeafe" strokeWidth={3} isAnimationActive={false} name="CPU %" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </BrutBox>
-
-                  <BrutBox className="p-4">
-                    <div className="mb-2 flex items-center justify-between text-sm font-bold">
-                      <span className="uppercase text-black/60">RAM pressure</span>
-                      <span className="text-black">{data.memory.raw.pressurePercentage}%</span>
-                    </div>
-                    <div className="h-32">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={history}>
-                          <CartesianGrid strokeDasharray="4 4" stroke="#11111122" />
-                          <XAxis dataKey="time" tick={{ fontSize: 11, fill: "#444" }} minTickGap={24} axisLine={false} tickLine={false} />
-                          <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#444" }} width={30} axisLine={false} tickLine={false} />
-                          <Tooltip content={<ChartTooltip />} />
-                          <Area type="monotone" dataKey="pressure" stroke="#ff5c5c" fill="#ffebe9" strokeWidth={3} isAnimationActive={false} name="Pressure %" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </BrutBox>
-
-                  <BrutBox className="p-4">
-                    <div className="mb-2 flex items-center justify-between text-sm font-bold">
-                      <span className="uppercase text-black/60">RAM available</span>
-                      <span className="text-black">{data.memory.raw.availabilityPercentage}%</span>
-                    </div>
-                    <div className="h-32">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={history}>
-                          <CartesianGrid strokeDasharray="4 4" stroke="#11111122" />
-                          <XAxis dataKey="time" tick={{ fontSize: 11, fill: "#444" }} minTickGap={24} axisLine={false} tickLine={false} />
-                          <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#444" }} width={30} axisLine={false} tickLine={false} />
-                          <Tooltip content={<ChartTooltip />} />
-                          <Area type="monotone" dataKey="availableRam" stroke="#4ade80" fill="#dcfce7" strokeWidth={3} isAnimationActive={false} name="Available %" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </BrutBox>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2">
-                <div className="border-b-[3px] border-r-[0px] border-black p-5 md:border-r-[3px] md:p-6">
-                  <SectionTag>memory ledger</SectionTag>
-                  <div className="mt-4 border-[3px] border-black bg-white p-4">
-                    <StatLine label="Available" value={`${formatNumber(data.memory.raw.available, 2)} GB`} />
-                    <StatLine label="Used" value={`${formatNumber(data.memory.raw.used, 2)} GB`} />
-                    <StatLine label="Cached" value={`${formatNumber(data.memory.raw.cached, 2)} GB`} />
-                    <StatLine label="Free" value={`${formatNumber(data.memory.raw.free, 2)} GB`} />
-                    <StatLine label="Swap used" value={`${formatNumber(data.memory.swap.used, 2)} GB`} />
-                  </div>
-                </div>
-
-                <div className="border-b-[3px] border-black p-5 md:p-6">
-                  <SectionTag>core grid</SectionTag>
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    {data.cpu.cpuUtilizationPerCore.map((core, index) => {
-                      const tone = getTone(core);
-                      return (
-                        <div key={index} className="border-[3px] border-black bg-white p-2.5">
-                          <div className="mb-2 flex items-center justify-between text-xs font-black uppercase">
-                            <span className="text-black/45">C{index + 1}</span>
-                            <span className={tone.text}>{formatNumber(core, 0)}%</span>
-                          </div>
-                          <ProgressRail value={core} />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </aside>
+          <div
+            className="inline-flex items-center gap-2 self-start rounded-[10px] border border-white/8 bg-white/3 px-3 py-1.5 text-sm text-white/72 sm:self-auto">
+            <Gauge size={14} className={bandwidthStatus.iconTone}/>
+            <span>Bandwidth</span>
+            <span className={`font-medium ${bandwidthStatus.toneClass}`}>{bandwidthStatus.label}</span>
           </div>
-        </BrutBox>
+        </div>
+
+        <div className="px-2 pt-2 sm:px-4 sm:pt-4">
+          <svg
+            viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`}
+            className="h-55 w-full sm:h-85"
+            fill="none"
+            onMouseLeave={() => setHoveredIndex(null)}
+          >
+            <defs>
+              <linearGradient id="downloadArea" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="rgba(102,126,255,0.28)"/>
+                <stop offset="65%" stopColor="rgba(102,126,255,0.10)"/>
+                <stop offset="100%" stopColor="rgba(102,126,255,0.01)"/>
+              </linearGradient>
+              <linearGradient id="uploadArea" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="rgba(74,222,128,0.20)"/>
+                <stop offset="65%" stopColor="rgba(74,222,128,0.08)"/>
+                <stop offset="100%" stopColor="rgba(74,222,128,0.01)"/>
+              </linearGradient>
+            </defs>
+
+            {yTicks.map((tick, index) => {
+              const y = PADDING.top + innerHeight - innerHeight * tick;
+              const label = maxValue * tick;
+
+              return (
+                <g key={index}>
+                  <line
+                    x1={PADDING.left}
+                    x2={SVG_WIDTH - PADDING.right}
+                    y1={y}
+                    y2={y}
+                    stroke="rgba(255,255,255,0.08)"
+                    strokeDasharray="4 7"
+                  />
+                  <text x={0} y={y + 4} fontSize="11" fill="rgba(255,255,255,0.52)">
+                    {formatAxisMbps(label)}
+                  </text>
+                </g>
+              );
+            })}
+
+            {chartPoints.map((_, index) => {
+              const x = PADDING.left + index * stepX;
+              return (
+                <line
+                  key={`grid-${index}`}
+                  x1={x}
+                  x2={x}
+                  y1={PADDING.top}
+                  y2={SVG_HEIGHT - PADDING.bottom}
+                  stroke="rgba(255,255,255,0.05)"
+                />
+              );
+            })}
+
+            <path d={downloadArea} fill="url(#downloadArea)"/>
+            <path d={uploadArea} fill="url(#uploadArea)"/>
+
+            <path
+              d={downloadLine}
+              stroke="rgba(110,135,255,0.98)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d={uploadLine}
+              stroke="rgba(61,216,134,0.96)"
+              strokeWidth="2"
+              strokeDasharray="6 6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+
+            {isHovering && (
+              <>
+                <line
+                  x1={hoverX}
+                  x2={hoverX}
+                  y1={PADDING.top}
+                  y2={SVG_HEIGHT - PADDING.bottom}
+                  stroke="rgba(255,255,255,0.16)"
+                />
+
+                <line
+                  x1={hoverX}
+                  x2={hoverX}
+                  y1={hoverDownloadY - 8}
+                  y2={hoverDownloadY + 8}
+                  stroke="rgba(110,135,255,1)"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                />
+                <line
+                  x1={hoverX}
+                  x2={hoverX}
+                  y1={hoverUploadY - 8}
+                  y2={hoverUploadY + 8}
+                  stroke="rgba(61,216,134,1)"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                />
+
+                <g transform={`translate(${tooltipX}, ${tooltipY})`}>
+                  <rect width={tooltipWidth} height={tooltipHeight} rx="12" fill="rgba(18,20,27,0.98)"
+                        stroke="rgba(255,255,255,0.08)"/>
+                  <path
+                    d={`M0,12 Q0,0 12,0 L${tooltipWidth - 12},0 Q${tooltipWidth},0 ${tooltipWidth},12 L${tooltipWidth},28 L0,28 Z`}
+                    fill="rgba(255,255,255,0.045)"/>
+                  <text x="12" y="18" fontSize="11" fontWeight="600" fill="rgba(255,255,255,0.92)">
+                    {activePoint.timestamp ? formatTickLabel(activePoint.timestamp) : "Waiting for data"}
+                  </text>
+
+                  <line x1="14" x2="14" y1="40" y2="52" stroke="rgba(110,135,255,1)" strokeWidth="2.5"
+                        strokeLinecap="round"/>
+                  <text x="24" y="49" fontSize="11" fill="rgba(255,255,255,0.62)">
+                    Download
+                  </text>
+                  <text x={tooltipWidth - 12} y="49" textAnchor="end" fontSize="11" fill="rgba(255,255,255,0.94)">
+                    {formatSpeed(activePoint.download)}
+                  </text>
+
+                  <line x1="14" x2="14" y1="59" y2="71" stroke="rgba(61,216,134,1)" strokeWidth="2.5"
+                        strokeLinecap="round"/>
+                  <text x="24" y="68" fontSize="11" fill="rgba(255,255,255,0.62)">
+                    Upload
+                  </text>
+                  <text x={tooltipWidth - 12} y="68" textAnchor="end" fontSize="11" fill="rgba(255,255,255,0.94)">
+                    {formatSpeed(activePoint.upload)}
+                  </text>
+
+                  <line x1="14" x2="14" y1="78" y2="90" stroke="rgba(251,191,36,0.95)" strokeWidth="2.5"
+                        strokeLinecap="round"/>
+                  <text x="24" y="87" fontSize="11" fill="rgba(255,255,255,0.62)">
+                    Delay
+                  </text>
+                  <text x={tooltipWidth - 12} y="87" textAnchor="end" fontSize="11" fill="rgba(255,255,255,0.94)">
+                    {formatDelay(activePoint.delay)}
+                  </text>
+                </g>
+              </>
+            )}
+
+            {chartPoints.map((_, index) => {
+              const x = PADDING.left + index * stepX;
+              const hitHeight = SVG_HEIGHT - PADDING.bottom - PADDING.top;
+              return (
+                <rect
+                  key={`hit-${index}`}
+                  x={x - Math.max(stepX / 2, 10)}
+                  y={PADDING.top}
+                  width={Math.max(stepX, 20)}
+                  height={hitHeight}
+                  fill="transparent"
+                  onMouseEnter={() => setHoveredIndex(index)}
+                />
+              );
+            })}
+
+            <g className="hidden sm:block">
+              {desktopLabelIndexes.map((index, labelIndex) => {
+                const x = PADDING.left + index * stepX;
+                return (
+                  <text
+                    key={`desktop-label-${index}`}
+                    x={x}
+                    y={SVG_HEIGHT - 12}
+                    textAnchor={index === 0 ? "start" : index === chartPoints.length - 1 ? "end" : "middle"}
+                    fontSize="11"
+                    fill="rgba(255,255,255,0.5)"
+                  >
+                    {getAxisTimeLabel(startTimestamp, endTimestamp, labelIndex, desktopLabelIndexes.length)}
+                  </text>
+                );
+              })}
+            </g>
+
+            <g className="sm:hidden">
+              {mobileLabelIndexes.map((index, labelIndex) => {
+                const x = PADDING.left + index * stepX;
+                return (
+                  <text
+                    key={`mobile-label-${index}`}
+                    x={x}
+                    y={SVG_HEIGHT - 8}
+                    textAnchor={index === 0 ? "start" : index === chartPoints.length - 1 ? "end" : "middle"}
+                    fontSize="13"
+                    fontWeight="500"
+                    fill="rgba(255,255,255,0.66)"
+                  >
+                    {getAxisTimeLabel(startTimestamp, endTimestamp, labelIndex, mobileLabelIndexes.length)}
+                  </text>
+                );
+              })}
+            </g>
+          </svg>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2.5 border-t border-white/6 px-2 pb-2 pt-2 sm:gap-3 sm:px-4 sm:pb-4 sm:pt-3">
+          <div className="rounded-2xl border border-white/7 bg-white/2.5 px-2.5 py-2 sm:px-3 sm:py-2.5">
+            <div
+              className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.12em] text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              <div className="flex items-center gap-2">
+                <ArrowDownRight size={13} className="text-[#6e87ff]"/>
+                Download
+              </div>
+              <div
+                className="text-[13px] font-semibold normal-case tracking-normal text-white/94">{formatSpeed(latest.download)}</div>
+            </div>
+            <div className="mt-1 hidden text-[12px] text-white/42 sm:block">Average {formatSpeed(avgDownload)}</div>
+          </div>
+
+          <div className="rounded-2xl border border-white/7 bg-white/2.5 px-2.5 py-2 sm:px-3 sm:py-2.5">
+            <div
+              className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.12em] text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              <div className="flex items-center gap-2">
+                <ArrowUpRight size={13} className="text-[#3dd886]"/>
+                Upload
+              </div>
+              <div
+                className="text-[13px] font-semibold normal-case tracking-normal text-white/94">{formatSpeed(latest.upload)}</div>
+            </div>
+            <div className="mt-1 hidden text-[12px] text-white/42 sm:block">Average {formatSpeed(avgUpload)}</div>
+          </div>
+
+          <div className="rounded-2xl border border-white/7 bg-white/2.5 px-2.5 py-2 sm:px-3 sm:py-2.5">
+            <div
+              className="flex flex-col gap-1 text-[11px] uppercase tracking-[0.12em] text-white/40 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+              <div className="flex items-center gap-2">
+                <TimerReset size={13} className="text-amber-300"/>
+                Latency
+              </div>
+              <div
+                className="text-[13px] font-semibold normal-case tracking-normal text-white/94">{formatDelay(avgDelay)}</div>
+            </div>
+            <div className="mt-1 hidden text-[12px] text-white/42 sm:block">Average response</div>
+          </div>
+        </div>
+
+        {error && <div className="border-t border-white/6 px-5 py-3 text-sm text-white/42">{error}</div>}
       </div>
     </div>
   );
