@@ -13,31 +13,20 @@ import {
 import {
   DESKTOP_LABEL_COUNT,
   MOBILE_LABEL_COUNT,
-  Y_TICKS,
+  DESKTOP_Y_TICKS,
+  MOBILE_Y_TICKS,
 } from "../constants";
 import {formatAxisMbps, getAxisTimeLabel} from "../utils/format";
 import type {ChartPoint} from "../types";
 import NetworkTooltip from "./NetworkTooltip";
 
-type TooltipComponentPropsLocal = {
-  active?: boolean;
-  payload?: Array<{ payload?: { download?: number | string; upload?: number | string } }>;
-  isMobile: boolean;
-};
-
 type Props = {
-  chartPoints: ChartPoint[];
-  maxValue: number;
-  innerWidth: number;
-  innerHeight: number;
-  stepX: number;
-  downloadLine: string;
-  uploadLine: string;
-  downloadArea: string;
-  uploadArea: string;
-  startTimestamp: number;
-  endTimestamp: number;
-  isMobile: boolean;
+  chartPoints: ChartPoint[],
+  maxValue: number,
+  startTimestamp: number,
+  endTimestamp: number,
+  isMobile: boolean,
+  innerWidth?: number
 };
 
 type ChartDatum = ChartPoint & {
@@ -66,8 +55,13 @@ function HoverOverlay({
                         yAxisMap,
                         offset,
                       }: HoverOverlayProps) {
-  const xAxis = xAxisMap ? (Object.values(xAxisMap)[0] as { scale: (v: number) => number }) : null;
-  const yAxis = yAxisMap ? (Object.values(yAxisMap)[0] as { scale: (v: number) => number }) : null;
+  const xAxis = xAxisMap
+    ? (Object.values(xAxisMap)[0] as { scale: (v: number) => number })
+    : null;
+
+  const yAxis = yAxisMap
+    ? (Object.values(yAxisMap)[0] as { scale: (v: number) => number })
+    : null;
 
   if (!xAxis || !yAxis || !offset || hoveredIndex === null || !chartPoints[hoveredIndex]) {
     return null;
@@ -142,40 +136,6 @@ function HoverOverlay({
   );
 }
 
-function YLabels({ yAxisMap, offset, safeMaxValue, isMobile }: {
-  yAxisMap?: Record<string, unknown>;
-  offset?: { left: number; top: number; width: number; height: number };
-  safeMaxValue: number;
-  isMobile: boolean;
-}) {
-  const yAxis = yAxisMap ? (Object.values(yAxisMap)[0] as { scale: (v: number) => number }) : null;
-  if (!yAxis || !offset) return null;
-
-  // place labels slightly inside the plotting area
-  const x = offset.left + 6;
-
-  return (
-    <g pointerEvents="none">
-      {Y_TICKS.map((tick, idx) => {
-        const value = safeMaxValue * tick;
-        const y = yAxis.scale(value);
-        return (
-          <text
-            key={`ylabel-${idx}`}
-            x={x}
-            y={y + 4}
-            textAnchor="start"
-            fontSize={isMobile ? 12 : 11}
-            fill="rgba(255,255,255,0.9)"
-          >
-            {formatAxisMbps(Number(value))}
-          </text>
-        );
-      })}
-    </g>
-  );
-}
-
 export function NetworkChart({
                                chartPoints,
                                maxValue,
@@ -206,6 +166,8 @@ export function NetworkChart({
     return new Map(xTicks.map((value, index) => [value.toFixed(6), index]));
   }, [xTicks]);
 
+  const yTicks = isMobile ? MOBILE_Y_TICKS : DESKTOP_Y_TICKS;
+
   const chartMargin = {
     top: 4,
     right: isMobile ? 10 : 16,
@@ -214,17 +176,18 @@ export function NetworkChart({
   };
 
   return (
-    <div className="h-55 w-full sm:h-85">
+    <div className="relative h-55 w-full sm:h-85">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={data}
           margin={chartMargin}
           onMouseMove={(state) => {
-            const s = state as { isTooltipActive?: boolean; activeTooltipIndex?: number | null };
-            if (
-              s?.isTooltipActive &&
-              typeof s.activeTooltipIndex === "number"
-            ) {
+            const s = state as {
+              isTooltipActive?: boolean;
+              activeTooltipIndex?: number | null;
+            };
+
+            if (s?.isTooltipActive && typeof s.activeTooltipIndex === "number") {
               setHoveredIndex(s.activeTooltipIndex);
               return;
             }
@@ -235,15 +198,15 @@ export function NetworkChart({
         >
           <defs>
             <linearGradient id="downloadArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#667EFF" stopOpacity={0.28}/>
-              <stop offset="65%" stopColor="#667EFF" stopOpacity={0.1}/>
-              <stop offset="100%" stopColor="#667EFF" stopOpacity={0.01}/>
+              <stop offset="0%" stopColor="#4ADE80" stopOpacity={0.28}/>
+              <stop offset="65%" stopColor="#4ADE80" stopOpacity={0.1}/>
+              <stop offset="100%" stopColor="#4ADE80" stopOpacity={0.01}/>
             </linearGradient>
 
             <linearGradient id="uploadArea" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#4ADE80" stopOpacity={0.2}/>
-              <stop offset="65%" stopColor="#4ADE80" stopOpacity={0.08}/>
-              <stop offset="100%" stopColor="#4ADE80" stopOpacity={0.01}/>
+              <stop offset="0%" stopColor="#667EFF" stopOpacity={0.2}/>
+              <stop offset="65%" stopColor="#667EFF" stopOpacity={0.08}/>
+              <stop offset="100%" stopColor="#667EFF" stopOpacity={0.01}/>
             </linearGradient>
           </defs>
 
@@ -265,7 +228,7 @@ export function NetworkChart({
               return (
                 <text
                   x={xNum}
-                  y={yNum + (isMobile ? 14 : 14)}
+                  y={yNum + 14}
                   textAnchor={
                     labelIndex === 0
                       ? "start"
@@ -291,7 +254,7 @@ export function NetworkChart({
           <YAxis
             type="number"
             domain={[0, safeMaxValue]}
-            ticks={Y_TICKS.map((tick) => safeMaxValue * tick)}
+            ticks={yTicks.map((tick) => safeMaxValue * tick)}
             tickLine={false}
             axisLine={false}
             width={0}
@@ -299,13 +262,13 @@ export function NetworkChart({
             tick={false}
           />
 
-          {Y_TICKS.map((tick, index) => (
+          {yTicks.map((tick, index) => (
             <ReferenceLine
               key={`y-${index}`}
               y={safeMaxValue * tick}
               stroke="rgba(255,255,255,0.08)"
               strokeDasharray="4 7"
-              strokeWidth={isMobile ? 2 : 1}
+              strokeWidth={isMobile ? 1.5 : 1}
             />
           ))}
 
@@ -314,17 +277,9 @@ export function NetworkChart({
               key={`x-${point.index}`}
               x={point.index}
               stroke="rgba(255,255,255,0.05)"
-              strokeWidth={isMobile ? 2 : 1}
+              strokeWidth={isMobile ? 1.5 : 1}
             />
           ))}
-
-          <Area
-            type="monotoneX"
-            dataKey="download"
-            stroke="none"
-            fill="url(#downloadArea)"
-            isAnimationActive={false}
-          />
 
           <Area
             type="monotoneX"
@@ -334,11 +289,19 @@ export function NetworkChart({
             isAnimationActive={false}
           />
 
+          <Area
+            type="monotoneX"
+            dataKey="download"
+            stroke="none"
+            fill="url(#downloadArea)"
+            isAnimationActive={false}
+          />
+
           <Line
             type="monotoneX"
             dataKey="download"
-            stroke="rgba(110,135,255,0.98)"
-            strokeWidth={isMobile ? 3 : 2}
+            stroke="rgba(61,216,134,0.96)"
+            strokeWidth={2.5}
             strokeLinecap="round"
             strokeLinejoin="round"
             dot={false}
@@ -349,9 +312,9 @@ export function NetworkChart({
           <Line
             type="monotoneX"
             dataKey="upload"
-            stroke="rgba(61,216,134,0.96)"
-            strokeWidth={isMobile ? 3 : 2}
-            strokeDasharray={isMobile ? "12 10" : "6 6"}
+            stroke="rgba(110,135,255,0.98)"
+            strokeWidth={2.5}
+            strokeDasharray={isMobile ? "12 10" : "10 8"}
             strokeLinecap="round"
             strokeLinejoin="round"
             dot={false}
@@ -362,21 +325,76 @@ export function NetworkChart({
           <Tooltip
             cursor={false}
             isAnimationActive={false}
-            allowEscapeViewBox={{ x: true, y: true }}
+            allowEscapeViewBox={{x: true, y: true}}
             wrapperStyle={{
               pointerEvents: "none",
               outline: "none",
               zIndex: 30,
             }}
             content={(props) => (
-              <NetworkTooltip {...(props as unknown as TooltipComponentPropsLocal)} isMobile={isMobile} />
+              <NetworkTooltip {...(props as unknown as any)} isMobile={isMobile}/>
             )}
           />
 
-          <Customized component={<HoverOverlay hoveredIndex={hoveredIndex} chartPoints={chartPoints} isMobile={isMobile} />} />
-          <Customized component={<YLabels safeMaxValue={safeMaxValue} isMobile={isMobile} />} />
+          <Customized
+            component={
+              <HoverOverlay
+                hoveredIndex={hoveredIndex}
+                chartPoints={chartPoints}
+                isMobile={isMobile}
+              />
+            }
+          />
         </ComposedChart>
       </ResponsiveContainer>
+
+      <div
+        className="pointer-events-none absolute"
+        style={{
+          top: chartMargin.top,
+          left: chartMargin.left,
+          right: chartMargin.right,
+          bottom: chartMargin.bottom,
+        }}
+      >
+        {yTicks.map((tick, idx) => {
+          const isTop = idx === yTicks.length - 1;
+          const isBottom = idx === 0;
+
+          return (
+            <div
+              key={`y-label-${idx}`}
+              className="absolute left-2"
+              style={{
+                top: `${(1 - tick) * 100}%`,
+                transform: isTop
+                  ? "translateY(0%)"
+                  : isBottom
+                    ? "translateY(-100%)"
+                    : "translateY(-50%)",
+              }}
+            >
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  height: isMobile ? 20 : 18,
+                  padding: isMobile ? "0 7px" : "0 6px",
+                  fontSize: isMobile ? 12 : 11,
+                  lineHeight: 1,
+                  color: "rgba(255,255,255,0.68)",
+                  whiteSpace: "nowrap",
+                  borderRadius: 6,
+                  background: "bg-zinc-900",
+                  backdropFilter: "blur(2px)",
+                }}
+              >
+                {formatAxisMbps(Number(safeMaxValue * tick))}
+              </span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

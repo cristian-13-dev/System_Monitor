@@ -3,25 +3,22 @@ import type { BandwidthStatus } from "../types";
 export function getBandwidthStatus(download: number, upload: number): BandwidthStatus {
   const combined = download + upload;
 
-  if (combined >= 120) {
+  if (combined >= 600) {
     return {
-      label: "Very High",
-      toneClass: "text-red-300",
-      iconTone: "text-red-300",
+      label: "Busy",
+      toneClass: "text-[#d83d3d]",
     };
   }
 
-  if (combined >= 80) {
+  if (combined >= 300) {
     return {
-      label: "High",
-      toneClass: "text-amber-400",
-      iconTone: "text-amber-400",
+      label: "Active",
+      toneClass: "text-[#d8a23d]",
     };
   }
 
   return {
-    label: "Low",
+    label: "Idle",
     toneClass: "text-[#3dd886]",
-    iconTone: "text-[#3dd886]",
   };
 }

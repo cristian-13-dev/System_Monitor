@@ -16,13 +16,6 @@ export default function NetworkWidget() {
     avgDownload,
     avgUpload,
     avgDelay,
-    innerWidth,
-    innerHeight,
-    stepX,
-    downloadLine,
-    uploadLine,
-    downloadArea,
-    uploadArea,
     startTimestamp,
     endTimestamp,
     bandwidthStatus,
@@ -30,20 +23,13 @@ export default function NetworkWidget() {
 
   return (
     <div className="min-h-screen bg-zinc-950/95 p-2 text-white sm:p-6">
-      <div className="w-full max-w-180 overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900 shadow-[0_18px_50px_rgba(0,0,0,0.42)]">
+      <div className="w-full max-w-180 rounded-[18px] border border-white/6 bg-zinc-900 shadow-[0_18px_50px_rgba(0,0,0,0.42)]">
         <NetworkHeader bandwidthStatus={bandwidthStatus} />
 
         <div className="px-0 pt-2 sm:px-0 sm:pt-4">
           <NetworkChart
             chartPoints={chartPoints}
             maxValue={maxValue}
-            innerWidth={innerWidth}
-            innerHeight={innerHeight}
-            stepX={stepX}
-            downloadLine={downloadLine}
-            uploadLine={uploadLine}
-            downloadArea={downloadArea}
-            uploadArea={uploadArea}
             startTimestamp={startTimestamp}
             endTimestamp={endTimestamp}
             isMobile={isMobile}

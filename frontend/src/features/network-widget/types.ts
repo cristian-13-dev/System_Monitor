@@ -12,7 +12,6 @@ export type ChartPoint = NetworkPoint & {
 export type BandwidthStatus = {
   label: string;
   toneClass: string;
-  iconTone: string;
 };
 
 export type Padding = {
