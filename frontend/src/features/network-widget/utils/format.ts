@@ -11,7 +11,7 @@ export function formatDelay(value: number) {
 }
 
 export function formatAxisMbps(value: number) {
-  return `${Math.round(value)} Mbps`;
+  return `${Math.round(value)}`;
 }
 
 export function formatTickLabel(timestamp: number) {

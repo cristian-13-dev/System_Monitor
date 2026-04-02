@@ -33,7 +33,7 @@ export default function NetworkWidget() {
       <div className="w-full max-w-180 overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900 shadow-[0_18px_50px_rgba(0,0,0,0.42)]">
         <NetworkHeader bandwidthStatus={bandwidthStatus} />
 
-        <div className="px-2 pt-2 sm:px-4 sm:pt-4">
+        <div className="px-0 pt-2 sm:px-0 sm:pt-4">
           <NetworkChart
             chartPoints={chartPoints}
             maxValue={maxValue}
