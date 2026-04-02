@@ -1,6 +1,6 @@
 import type { Padding } from "./types";
 
-export const API_URL = "http://100.93.206.41:3001/api/metrics";
+export const API_URL = "http://localhost:3001/api/metrics";
 export const MAX_POINTS = 16;
 
 export const SVG_WIDTH = 640;
