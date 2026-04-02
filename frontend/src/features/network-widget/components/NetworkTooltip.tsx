@@ -36,7 +36,7 @@ function TooltipBody({
       <div className={rowGapClass}>
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-white/72">
-            <span className={`${markerClass} bg-[rgba(110,135,255,0.98)]`} />
+            <span className={`${markerClass} bg-[rgba(61,216,134,0.96)]`} />
             <span className={labelClass}>Download</span>
           </div>
           <span className={valueClass}>
@@ -46,7 +46,7 @@ function TooltipBody({
 
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-white/72">
-            <span className={`${markerClass} bg-[rgba(61,216,134,0.96)]`} />
+            <span className={`${markerClass} bg-[rgba(110,135,255,0.98)]`} />
             <span className={labelClass}>Upload</span>
           </div>
           <span className={valueClass}>
