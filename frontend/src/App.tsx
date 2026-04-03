@@ -1,5 +1,5 @@
 import { NetworkWidget } from "./features/network-widget";
-import SystemHeader from "./features/system-header/SystemHeader";
+import SystemHeader from "./features/system-header/SystemHeader.tsx";
 
 const App = () => {
   return (
