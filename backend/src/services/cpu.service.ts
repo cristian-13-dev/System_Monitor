@@ -30,10 +30,11 @@ let cpuMetrics: CpuMetrics = {
 
 async function refreshCpuMetrics(): Promise<void> {
   try {
-    const [cpu, currentLoad, cpuTemperature] = await Promise.all([
+    const [cpu, currentLoad, cpuTemperature, cpuSpeed] = await Promise.all([
       si.cpu(),
       si.currentLoad(),
       si.cpuTemperature(),
+      si.cpuCurrentSpeed(),
     ]);
 
     cpuMetrics = {
@@ -43,9 +44,9 @@ async function refreshCpuMetrics(): Promise<void> {
       averageCpuUtilization: Number(currentLoad.currentLoad.toFixed(2)),
       totalCpuCores: cpu.cores,
       physicalCores: cpu.physicalCores,
-      minimumCpuFrequency: cpu.speedMin ?? null,
-      maximumCpuFrequency: cpu.speedMax ?? null,
-      averageCpuFrequency: cpu.speed ?? null,
+      minimumCpuFrequency: cpuSpeed.min ?? null,
+      maximumCpuFrequency: cpuSpeed.max ?? null,
+      averageCpuFrequency: cpuSpeed.avg ?? null,
       averageCpuTemperature: cpuTemperature.main ?? null,
       updatedAt: new Date().toISOString(),
     };
