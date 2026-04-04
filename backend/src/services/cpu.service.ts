@@ -61,7 +61,7 @@ async function refreshCpuMetrics(): Promise<void> {
       cpuManufacturer: cpu.manufacturer,
       cpuBrand: cpu.brand,
       cpuUtilizationPerCore: currentLoad.cpus.map(cpu => Number(cpu.load.toFixed(2))),
-      averageCpuUtilization: Number(currentLoad.currentLoad.toFixed(2)),
+      averageCpuUtilization: Math.round(Number(currentLoad.currentLoad.toFixed(2))),
       totalCpuCores: cpu.cores,
       physicalCores: cpu.physicalCores,
       minimumCpuFrequency: minFreq,
