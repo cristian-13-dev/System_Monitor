@@ -45,6 +45,7 @@ type CpuMetrics = {
   cpuManufacturer?: string | null;
   cpuBrand?: string | null;
   cpuUtilizationPerCore: number[];
+  cpuFrequencyPerCore: number[];
   averageCpuUtilization: number;
   totalCpuCores?: number | null;
   physicalCores?: number | null;
@@ -68,7 +69,7 @@ function Metric({
 }) {
   return (
     <div className={`flex items-center gap-2 ${align === "right" ? "ml-auto" : ""}`}>
-      <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: tone ?? "#52525b" }} />
+      <Icon className="h-3.5 w-3.5 shrink-0" style={{color: tone ?? "#52525b"}}/>
       <span className="tabular-nums text-[13px] font-medium text-zinc-300">{value}</span>
     </div>
   );
@@ -110,8 +111,8 @@ export default function SystemHeader() {
     ? getTone(cpu.averageCpuTemperature, TEMP_WARN, TEMP_HOT)
     : COLOR.track;
 
-  const freqLabel = cpu.maximumCpuFrequency != null
-    ? `${fmtFreq(cpu.averageCpuFrequency)} / ${fmtFreq(cpu.maximumCpuFrequency)}`
+  const freqLabel = (cpu.maximumCpuFrequency != null && cpu.cpuFrequencyPerCore != null)
+    ? `${fmtFreq(cpu.cpuFrequencyPerCore.reduce((acc, val) => acc + val, 0) / cpu.cpuFrequencyPerCore.length)} / ${fmtFreq(cpu.maximumCpuFrequency)}`
     : fmtFreq(cpu.averageCpuFrequency);
 
   const coreCount = cpu.physicalCores ?? cpu.cpuUtilizationPerCore.length;
@@ -120,8 +121,8 @@ export default function SystemHeader() {
   const secondRow = cpu.cpuUtilizationPerCore.slice(coresPerRow, coreCount);
 
   const gaugeData = [
-    { name: "usage", value: cpu.averageCpuUtilization },
-    { name: "rest", value: 100 - cpu.averageCpuUtilization },
+    {name: "usage", value: cpu.averageCpuUtilization},
+    {name: "rest", value: 100 - cpu.averageCpuUtilization},
   ];
 
   const paddedHistory = [
@@ -140,29 +141,35 @@ export default function SystemHeader() {
 
       <div
         className="overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900"
-        style={{ boxShadow: "0 20px 50px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)" }}
+        style={{boxShadow: "0 20px 50px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)"}}
       >
         {/* ── Header ── */}
         <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/8 bg-white/4 text-white/85">
-              <Cpu size={21} />
+            <div
+              className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/8 bg-white/4 text-white/85">
+              <Cpu size={21}/>
             </div>
             <div>
               <h2 className="text-[15px] font-medium text-white/92">CPU Activity</h2>
-              <p className="mt-0.5 text-xs text-white/46">{processorName} {cpu.cpuManufacturer !== 'AMD' && '(' + cpu.totalCpuCores + '-Core Processor)'}</p>
+              <p
+                className="mt-0.5 text-xs text-white/46">{processorName} {cpu.cpuManufacturer !== 'AMD' && '(' + cpu.totalCpuCores + '-Core Processor)'}</p>
             </div>
           </div>
 
           <div
             className="flex items-center gap-2 rounded-lg border px-3 py-1.5"
-            style={{ borderColor: `${loadTone}28`, background: `${loadTone}0f` }}
+            style={{borderColor: `${loadTone}28`, background: `${loadTone}0f`}}
           >
             <span
               className="h-1.5 w-1.5 rounded-full"
-              style={{ backgroundColor: loadTone, boxShadow: `0 0 6px ${loadTone}`, animation: "pulse 2.5s ease-in-out infinite" }}
+              style={{
+                backgroundColor: loadTone,
+                boxShadow: `0 0 6px ${loadTone}`,
+                animation: "pulse 2.5s ease-in-out infinite"
+              }}
             />
-            <span className="text-[12px] font-medium" style={{ color: loadTone }}>
+            <span className="text-[12px] font-medium" style={{color: loadTone}}>
               {getLoadStatus(cpu.averageCpuUtilization)}
             </span>
           </div>
@@ -171,7 +178,7 @@ export default function SystemHeader() {
         {/* ── Body ── */}
         <div className="px-5 pb-5 pt-4">
           <div className="mb-4 flex items-center">
-            <Metric icon={Zap} value={freqLabel} tone={COLOR.warn} />
+            <Metric icon={Zap} value={freqLabel} tone={COLOR.warn}/>
             <Metric
               icon={Thermometer}
               value={fmtTemp(cpu.averageCpuTemperature)}
@@ -182,13 +189,13 @@ export default function SystemHeader() {
 
           <div className="rounded-xl border border-white/6 px-4 pb-4 pt-4 bg-white/2.5">
             {/* Gauge */}
-            <div className="relative overflow-hidden" style={{ height: 200 }}>
+            <div className="relative overflow-hidden" style={{height: 200}}>
               <div
                 className="absolute left-1/2 top-1/2"
-                style={{ width: "124%", height: 250, transform: "translate(-50%, -50%)" }}
+                style={{width: "124%", height: 250, transform: "translate(-50%, -50%)"}}
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                  <PieChart margin={{top: 0, right: 0, bottom: 0, left: 0}}>
                     <Pie
                       data={gaugeData}
                       dataKey="value"
@@ -205,8 +212,8 @@ export default function SystemHeader() {
                       animationDuration={800}
                       animationEasing="ease-out"
                     >
-                      <Cell fill={loadTone} />
-                      <Cell fill={COLOR.track} />
+                      <Cell fill={loadTone}/>
+                      <Cell fill={COLOR.track}/>
                     </Pie>
                   </PieChart>
                 </ResponsiveContainer>
@@ -215,10 +222,11 @@ export default function SystemHeader() {
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center pt-8">
                 <div
                   className="text-[24px] font-semibold leading-none tracking-tight text-white/92"
-                  style={{ fontVariantNumeric: "tabular-nums" }}
+                  style={{fontVariantNumeric: "tabular-nums"}}
                 >
                   {cpu.averageCpuUtilization}
-                  <span className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium text-white/55 align-middle">
+                  <span
+                    className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium text-white/55 align-middle">
                     %
                   </span>
                 </div>
@@ -243,7 +251,7 @@ export default function SystemHeader() {
               ))}
             </div>
 
-            <div className="my-4 border-t border-white/6" />
+            <div className="my-4 border-t border-white/6"/>
 
             {/* Per-core */}
             <div>
@@ -253,7 +261,7 @@ export default function SystemHeader() {
                   {([["Normal", COLOR.good], ["Medium", COLOR.warn], ["High", COLOR.hot]] as const).map(
                     ([label, color]) => (
                       <div key={label} className="flex items-center gap-1.5">
-                        <div className="h-1.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />
+                        <div className="h-1.5 w-2.5 rounded-xs" style={{backgroundColor: color}}/>
                         <span className="text-[9px] uppercase tracking-[0.18em] text-white/46">{label}</span>
                       </div>
                     )
@@ -263,14 +271,14 @@ export default function SystemHeader() {
 
               <div
                 className="grid gap-1.5"
-                style={{ gridTemplateColumns: `repeat(${coresPerRow}, minmax(0, 1fr))` }}
+                style={{gridTemplateColumns: `repeat(${coresPerRow}, minmax(0, 1fr))`}}
               >
                 {firstRow.map((v, i) => (
                   <div
                     key={i}
                     title={`Core ${i + 1}: ${v}%`}
                     className="h-4.5 rounded-sm"
-                    style={{ backgroundColor: getTone(v, LOAD_WARN, LOAD_HOT), opacity: 0.88 }}
+                    style={{backgroundColor: getTone(v, LOAD_WARN, LOAD_HOT), opacity: 0.88}}
                   />
                 ))}
                 {secondRow.map((v, i) => (
@@ -278,7 +286,7 @@ export default function SystemHeader() {
                     key={i + coresPerRow}
                     title={`Core ${i + coresPerRow + 1}: ${v}%`}
                     className="h-4.5 rounded-sm"
-                    style={{ backgroundColor: getTone(v, LOAD_WARN, LOAD_HOT), opacity: 0.88 }}
+                    style={{backgroundColor: getTone(v, LOAD_WARN, LOAD_HOT), opacity: 0.88}}
                   />
                 ))}
               </div>
