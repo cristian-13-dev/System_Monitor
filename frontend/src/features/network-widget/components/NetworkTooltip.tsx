@@ -1,6 +1,6 @@
 type TooltipComponentProps = {
   active?: boolean;
-  payload?: Array<{ payload?: { download?: number | string; upload?: number | string } }>;
+  payload?: ReadonlyArray<{ payload?: { download?: number | string; upload?: number | string } }>;
   isMobile: boolean;
 };
 

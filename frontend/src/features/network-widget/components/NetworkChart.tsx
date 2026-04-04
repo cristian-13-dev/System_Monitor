@@ -332,7 +332,7 @@ export function NetworkChart({
               zIndex: 30,
             }}
             content={(props) => (
-              <NetworkTooltip {...(props as unknown as any)} isMobile={isMobile}/>
+              <NetworkTooltip {...(props)} isMobile={isMobile}/>
             )}
           />
 
@@ -386,7 +386,7 @@ export function NetworkChart({
                   whiteSpace: "nowrap",
                   borderRadius: 6,
                   background: "bg-zinc-900",
-                  backdropFilter: "blur(2px)",
+                  backdropFilter: "blur(100px)",
                 }}
               >
                 {formatAxisMbps(Number(safeMaxValue * tick))}
