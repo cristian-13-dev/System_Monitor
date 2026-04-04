@@ -1,4 +1,5 @@
 import si from 'systeminformation';
+import { readFile } from "fs/promises";
 
 export type CpuMetrics = {
   cpuManufacturer?: string | null;
@@ -28,25 +29,44 @@ let cpuMetrics: CpuMetrics = {
   updatedAt: new Date().toISOString(),
 };
 
+async function getCpuMaxFrequency(): Promise<number | null> {
+  try {
+    const raw = await readFile("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", "utf-8");
+    return parseFloat(raw.trim()) / 1_000_000;
+  } catch {
+    return null;
+  }
+}
+
+async function getCpuMinFrequency(): Promise<number | null> {
+  try {
+    const raw = await readFile("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_min_freq", "utf-8");
+    return parseFloat(raw.trim()) / 1_000_000;
+  } catch {
+    return null;
+  }
+}
+
 async function refreshCpuMetrics(): Promise<void> {
   try {
-    const [cpu, currentLoad, cpuTemperature, cpuSpeed] = await Promise.all([
+    const [cpu, currentLoad, cpuTemperature, maxFreq, minFreq] = await Promise.all([
       si.cpu(),
       si.currentLoad(),
       si.cpuTemperature(),
-      si.cpuCurrentSpeed(),
+      getCpuMaxFrequency(),
+      getCpuMinFrequency(),
     ]);
 
     cpuMetrics = {
       cpuManufacturer: cpu.manufacturer,
       cpuBrand: cpu.brand,
       cpuUtilizationPerCore: currentLoad.cpus.map(cpu => Number(cpu.load.toFixed(2))),
-      averageCpuUtilization: Math.round(Number(currentLoad.currentLoad.toFixed(2))),
+      averageCpuUtilization: Number(currentLoad.currentLoad.toFixed(2)),
       totalCpuCores: cpu.cores,
       physicalCores: cpu.physicalCores,
-      minimumCpuFrequency: cpu.speedMin || cpuSpeed.min || null,
-      maximumCpuFrequency: cpu.speedMax || cpuSpeed.max || null,
-      averageCpuFrequency: cpuSpeed.avg ?? null,
+      minimumCpuFrequency: minFreq,
+      maximumCpuFrequency: maxFreq,
+      averageCpuFrequency: cpu.speed ?? null,
       averageCpuTemperature: cpuTemperature.main ?? null,
       updatedAt: new Date().toISOString(),
     };
@@ -57,7 +77,6 @@ async function refreshCpuMetrics(): Promise<void> {
 
 export async function startCpuMetricsPolling(): Promise<void> {
   await refreshCpuMetrics();
-
   setInterval(() => {
     void refreshCpuMetrics();
   }, 1000);

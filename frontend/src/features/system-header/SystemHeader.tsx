@@ -1,3 +1,5 @@
+// SystemHeader.tsx
+
 import { useState, useEffect } from "react";
 import type { ElementType } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
@@ -14,6 +16,7 @@ const LOAD_WARN = 75;
 const LOAD_HOT = 85;
 const TEMP_WARN = 75;
 const TEMP_HOT = 85;
+const HISTORY_SIZE = 20;
 
 function getTone(value: number, warn: number, hot: number): string {
   if (value >= hot) return COLOR.hot;
@@ -27,8 +30,15 @@ function getLoadStatus(v: number): string {
   return "Normal";
 }
 
-function fmt(value: number | null | undefined, suffix: string, decimals = 2): string {
-  return value != null ? `${value.toFixed(decimals)}${suffix}` : "N/A";
+function fmtFreq(value: number | null | undefined): string {
+  if (value == null) return "N/A";
+  if (value < 1) return `${(value * 1000).toFixed(0)} MHz`;
+  return `${value.toFixed(2)} GHz`;
+}
+
+function fmtTemp(value: number | null | undefined): string {
+  if (value == null) return "N/A";
+  return `${value.toFixed(0)}°C`;
 }
 
 type CpuMetrics = {
@@ -66,12 +76,16 @@ function Metric({
 
 export default function SystemHeader() {
   const [cpu, setCpu] = useState<CpuMetrics | null>(null);
+  const [history, setHistory] = useState<number[]>([]);
 
   useEffect(() => {
     const fetchData = () => {
       fetch("http://100.93.206.41:3001/api/cpu")
         .then((res) => res.json())
-        .then(setCpu)
+        .then((data: CpuMetrics) => {
+          setHistory((prev) => [...prev, data.averageCpuUtilization].slice(-HISTORY_SIZE));
+          setCpu(data);
+        })
         .catch(console.error);
     };
 
@@ -83,14 +97,13 @@ export default function SystemHeader() {
   if (!cpu) {
     return (
       <section className="w-full max-w-130">
-        <div className="overflow-hidden rounded-[18px] border border-white/[0.07] bg-zinc-900 px-5 py-8 text-center text-sm text-white/40">
+        <div className="overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900 px-5 py-8 text-center text-sm text-white/40">
           Loading CPU metrics…
         </div>
       </section>
     );
   }
 
-  // Derived values
   const processorName = [cpu.cpuManufacturer, cpu.cpuBrand].filter(Boolean).join(" ");
   const loadTone = getTone(cpu.averageCpuUtilization, LOAD_WARN, LOAD_HOT);
   const tempTone = cpu.averageCpuTemperature != null
@@ -98,8 +111,8 @@ export default function SystemHeader() {
     : COLOR.track;
 
   const freqLabel = cpu.maximumCpuFrequency != null
-    ? `${fmt(cpu.averageCpuFrequency, "")} / ${fmt(cpu.maximumCpuFrequency, " GHz")}`
-    : fmt(cpu.averageCpuFrequency, " GHz");
+    ? `${fmtFreq(cpu.averageCpuFrequency)} / ${fmtFreq(cpu.maximumCpuFrequency)}`
+    : fmtFreq(cpu.averageCpuFrequency);
 
   const coreCount = cpu.physicalCores ?? cpu.cpuUtilizationPerCore.length;
   const coresPerRow = Math.ceil(coreCount / 2);
@@ -111,6 +124,11 @@ export default function SystemHeader() {
     { name: "rest", value: 100 - cpu.averageCpuUtilization },
   ];
 
+  const paddedHistory = [
+    ...Array(HISTORY_SIZE - history.length).fill(null),
+    ...history,
+  ] as (number | null)[];
+
   return (
     <section className="w-full max-w-130">
       <style>{`
@@ -121,7 +139,7 @@ export default function SystemHeader() {
       `}</style>
 
       <div
-        className="overflow-hidden rounded-[18px] border border-white/[0.07] bg-zinc-900"
+        className="overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900"
         style={{ boxShadow: "0 20px 50px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)" }}
       >
         {/* ── Header ── */}
@@ -152,21 +170,17 @@ export default function SystemHeader() {
 
         {/* ── Body ── */}
         <div className="px-5 pb-5 pt-4">
-          {/* Metrics row */}
           <div className="mb-4 flex items-center">
             <Metric icon={Zap} value={freqLabel} tone={COLOR.warn} />
             <Metric
               icon={Thermometer}
-              value={fmt(cpu.averageCpuTemperature, "°C", 0)}
+              value={fmtTemp(cpu.averageCpuTemperature)}
               tone={tempTone}
               align="right"
             />
           </div>
 
-          <div
-            className="rounded-xl border border-white/6 px-4 pb-4 pt-4"
-            style={{ background: "rgba(255,255,255,0.02)" }}
-          >
+          <div className="rounded-xl border border-white/6 px-4 pb-4 pt-4 bg-white/2.5">
             {/* Gauge */}
             <div className="relative overflow-hidden" style={{ height: 200 }}>
               <div
@@ -212,6 +226,21 @@ export default function SystemHeader() {
                   CPU Load
                 </div>
               </div>
+            </div>
+
+            {/* ── History bar ── */}
+            <div className="mt-3 flex items-center gap-1">
+              {paddedHistory.map((v, i) => (
+                <div
+                  key={i}
+                  title={v != null ? `${v}%` : undefined}
+                  className="h-3 flex-1 rounded-[3px] transition-colors duration-500"
+                  style={{
+                    backgroundColor: v != null ? getTone(v, LOAD_WARN, LOAD_HOT) : COLOR.track,
+                    opacity: v != null ? 0.85 : 0.3,
+                  }}
+                />
+              ))}
             </div>
 
             <div className="my-4 border-t border-white/6" />
