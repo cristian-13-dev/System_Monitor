@@ -5,6 +5,10 @@ export type CpuMetrics = {
   cpuBrand?: string | null;
   cpuUtilizationPerCore: number[];
   averageCpuUtilization: number;
+  totalCpuCores?: number | null;
+  physicalCores?: number | null;
+  minimumCpuFrequency?: number | null;
+  maximumCpuFrequency?: number | null;
   averageCpuFrequency: number | null;
   averageCpuTemperature: number | null;
   updatedAt: string;
@@ -13,19 +17,22 @@ export type CpuMetrics = {
 let cpuMetrics: CpuMetrics = {
   cpuManufacturer: null,
   cpuBrand: null,
+  totalCpuCores: null,
+  physicalCores: null,
   cpuUtilizationPerCore: [],
   averageCpuUtilization: 0,
   averageCpuFrequency: null,
+  minimumCpuFrequency: null,
+  maximumCpuFrequency: null,
   averageCpuTemperature: null,
   updatedAt: new Date().toISOString(),
 };
 
 async function refreshCpuMetrics(): Promise<void> {
   try {
-    const [cpu, currentLoad, cpuSpeed, cpuTemperature] = await Promise.all([
+    const [cpu, currentLoad, cpuTemperature] = await Promise.all([
       si.cpu(),
       si.currentLoad(),
-      si.cpuCurrentSpeed(),
       si.cpuTemperature(),
     ]);
 
@@ -34,7 +41,11 @@ async function refreshCpuMetrics(): Promise<void> {
       cpuBrand: cpu.brand,
       cpuUtilizationPerCore: currentLoad.cpus.map(cpu => Number(cpu.load.toFixed(2))),
       averageCpuUtilization: Number(currentLoad.currentLoad.toFixed(2)),
-      averageCpuFrequency: cpuSpeed.avg ?? null,
+      totalCpuCores: cpu.cores,
+      physicalCores: cpu.physicalCores,
+      minimumCpuFrequency: cpu.speedMin ?? null,
+      maximumCpuFrequency: cpu.speedMax ?? null,
+      averageCpuFrequency: cpu.speed ?? null,
       averageCpuTemperature: cpuTemperature.main ?? null,
       updatedAt: new Date().toISOString(),
     };
