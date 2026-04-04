@@ -150,7 +150,7 @@ export default function SystemHeader() {
             </div>
             <div>
               <h2 className="text-[15px] font-medium text-white/92">CPU Activity</h2>
-              <p className="mt-0.5 text-xs text-white/46">{processorName}</p>
+              <p className="mt-0.5 text-xs text-white/46">{processorName} {cpu.cpuManufacturer !== 'AMD' && '(' + cpu.totalCpuCores + '-Core Processor)'}</p>
             </div>
           </div>
 
