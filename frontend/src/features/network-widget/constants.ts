@@ -13,6 +13,13 @@ export const PADDING: Padding = {
   left: 0,
 };
 
+export const COLOR = {
+  good:  "#3dd886",
+  warn:  "#d8a23d",
+  hot:   "#d83d3d",
+  track: "rgba(255,255,255,0.06)",
+} as const;
+
 export const DESKTOP_LABEL_COUNT = 7;
 export const MOBILE_LABEL_COUNT = 4;
 export const DESKTOP_Y_TICKS = [0.2, 0.4, 0.6, 0.8, 1];

@@ -7,7 +7,7 @@ import type { ChartPoint, NetworkPoint } from "../types";
 export function useNetworkChart(points: NetworkPoint[]) {
   const chartPoints = useMemo<ChartPoint[]>(() => {
     if (!points.length) {
-      return Array.from({ length: MAX_POINTS }, (_, index) => ({
+      return Array.from({length: MAX_POINTS}, (_, index) => ({
         timestamp: 0,
         download: 0,
         upload: 0,
@@ -18,10 +18,10 @@ export function useNetworkChart(points: NetworkPoint[]) {
 
     const padded = [...points];
     while (padded.length < MAX_POINTS) {
-      padded.unshift({ timestamp: 0, download: 0, upload: 0, delay: 0 });
+      padded.unshift({timestamp: 0, download: 0, upload: 0, delay: 0});
     }
 
-    return padded.map((point, index) => ({ ...point, index }));
+    return padded.map((point, index) => ({...point, index}));
   }, [points]);
 
   const latest = chartPoints[chartPoints.length - 1];
