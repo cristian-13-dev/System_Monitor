@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import si from 'systeminformation';
-import {formatToGb} from '../utils/formatToGb.js';
+import { formatToGb } from '../utils/formatToGb.js';
 
 export type MemorySection = {
   total: number;
@@ -138,10 +138,6 @@ async function getFallbackMemoryMetrics(): Promise<MemoryMetrics> {
   });
 
   const swap = buildSwapSection(clamp(mem.swaptotal), clamp(mem.swapfree));
-
-  console.warn(
-    `[memory] Non-Linux platform detected (${process.platform}). Using fallback memory metrics.`
-  );
 
   return {
     raw,
