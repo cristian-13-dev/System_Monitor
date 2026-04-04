@@ -69,7 +69,7 @@ export default function SystemHeader() {
 
   useEffect(() => {
     const fetchData = () => {
-      fetch("http://localhost:3001/api/cpu")
+      fetch("http://100.93.206.41:3001/api/cpu")
         .then((res) => res.json())
         .then(setCpu)
         .catch(console.error);
