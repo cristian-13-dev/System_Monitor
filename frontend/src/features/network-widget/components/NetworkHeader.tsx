@@ -24,7 +24,7 @@ export function NetworkHeader({ bandwidthStatus }: Props) {
         <div>
           <div className="text-[15px] font-medium text-white/92">Network activity</div>
           <div className="mt-0.5 text-xs text-white/46">
-            Real-time download, upload and latency data
+            Download, upload and latency data
           </div>
         </div>
       </div>

@@ -47,7 +47,8 @@ type CpuMetrics = {
   cpuUtilizationPerCore: number[];
   cpuFrequencyPerCore: number[];
   averageCpuUtilization: number;
-  totalCpuCores?: number | null;
+  cpuCores?: number | null;
+  cpuThreads?: number | null;
   physicalCores?: number | null;
   minimumCpuFrequency?: number | null;
   maximumCpuFrequency?: number | null;
@@ -144,7 +145,7 @@ export default function SystemHeader() {
         style={{boxShadow: "0 20px 50px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)"}}
       >
         {/* ── Header ── */}
-        <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4">
+        <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3 sm:px-5 sm:py-4">
           <div className="flex items-center gap-3">
             <div
               className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/8 bg-white/4 text-white/85">
@@ -153,7 +154,7 @@ export default function SystemHeader() {
             <div>
               <h2 className="text-[15px] font-medium text-white/92">CPU Activity</h2>
               <p
-                className="mt-0.5 text-xs text-white/46">{processorName} {cpu.cpuManufacturer !== 'AMD' && '(' + cpu.totalCpuCores + '-Core Processor)'}</p>
+                className="mt-0.5 text-xs text-white/46">{processorName} {cpu.cpuManufacturer !== 'AMD' && '(' + cpu.cpuCores + 'C / ' + cpu.cpuThreads + 'T)'}</p>
             </div>
           </div>
 
@@ -176,7 +177,7 @@ export default function SystemHeader() {
         </div>
 
         {/* ── Body ── */}
-        <div className="px-5 pb-5 pt-4">
+        <div className="px-2 sm:px-4 pb-2 sm:pb-5 pt-4">
           <div className="mb-4 flex items-center">
             <Metric icon={Zap} value={freqLabel} tone={COLOR.warn}/>
             <Metric
