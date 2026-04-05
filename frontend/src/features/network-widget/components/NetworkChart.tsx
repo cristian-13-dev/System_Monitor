@@ -176,7 +176,7 @@ export function NetworkChart({
   };
 
   return (
-    <div className="relative h-55 w-full sm:h-85">
+    <div className="relative overflow-hidden sm:overflow-visible h-68 w-full sm:h-85">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
           data={data}
@@ -272,7 +272,7 @@ export function NetworkChart({
             />
           ))}
 
-          {data.map((point) => (
+          {data.filter((_, i) => i % 2 === 1).map((point) => (
             <ReferenceLine
               key={`x-${point.index}`}
               x={point.index}

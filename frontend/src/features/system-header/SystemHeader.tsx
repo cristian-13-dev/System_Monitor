@@ -141,8 +141,7 @@ export default function SystemHeader() {
       `}</style>
 
       <div
-        className="overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900"
-        style={{boxShadow: "0 20px 50px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)"}}
+        className="overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900 shadow-lg"
       >
         {/* ── Header ── */}
         <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3 sm:px-5 sm:py-4">
