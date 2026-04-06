@@ -1,6 +1,6 @@
 import type { Padding } from "./types";
 
-export const API_URL = "http://100.93.206.41:3001/api/metrics";
+export const apiUrl = import.meta.env.VITE_API_URL;
 export const MAX_POINTS = 16;
 
 export const SVG_WIDTH = 640;

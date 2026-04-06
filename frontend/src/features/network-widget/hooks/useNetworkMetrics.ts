@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { API_URL, MAX_POINTS, POLLING_INTERVAL_MS } from "../constants";
+import { MAX_POINTS, POLLING_INTERVAL_MS } from "../constants";
 import { getMetric } from "../utils/metric";
 import type { NetworkPoint } from "../types";
+import {apiUrl} from "../constants";
 
 export function useNetworkMetrics() {
   const [points, setPoints] = useState<NetworkPoint[]>([]);
@@ -12,7 +13,7 @@ export function useNetworkMetrics() {
 
     const fetchMetrics = async () => {
       try {
-        const response = await fetch(API_URL);
+        const response = await fetch(apiUrl);
         if (!response.ok) throw new Error(`Request failed: ${response.status}`);
 
         const payload = await response.json();

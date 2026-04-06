@@ -23,7 +23,7 @@ export default function NetworkWidget() {
 
   return (
     <div
-      className="w-full max-w-180 rounded-[18px] border border-white/6 bg-zinc-900 shadow-lg">
+      className="w-full max-w-180 h-full rounded-[18px] border border-white/6 bg-zinc-900 shadow-lg">
       <NetworkHeader bandwidthStatus={bandwidthStatus}/>
 
       <div className="px-0 pt-2 sm:px-0 sm:pt-4">

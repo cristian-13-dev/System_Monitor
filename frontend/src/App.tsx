@@ -1,17 +1,12 @@
-import { NetworkWidget } from "./features/network-widget";
-import SystemHeader from "./features/system-header/SystemHeader.tsx";
+import {NetworkWidget} from "./features/network-widget";
+import CpuWidget from "./features/cpu-widget/components/CpuWidget.tsx";
 import "./App.css";
 
 const App = () => {
   return (
     <main className="xl:flex space-y-3 gap-3 min-h-screen px-3 py-3 sm:px-6 sm:py-6">
-      <div className="sm:w-110">
-        <SystemHeader/>
-      </div>
-
-      <div className="min-w-0">
-        <NetworkWidget/>
-      </div>
+      <CpuWidget/>
+      <NetworkWidget/>
     </main>
   );
 };
