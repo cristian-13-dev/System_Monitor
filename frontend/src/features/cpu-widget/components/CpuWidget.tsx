@@ -10,15 +10,17 @@ import {CpuIndividualCore} from "./CpuIndividualCore.tsx";
 import "@/App.css"
 
 export default function CpuWidget() {
-  const {cpu, history} = useCpuMetrics();
+  const {cpu, history, error} = useCpuMetrics();
 
   if (!cpu) {
     return (
       <section className="w-full max-w-130">
-        <div
-          className="overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900 px-5 py-8 text-center text-sm text-white/40">
-          Loading CPU metrics…
-        </div>
+        {error
+          ? <h1 className="overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900 px-5 py-8 text-center text-sm text-white/40">{error.message}</h1>
+          : <div
+            className="overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900 px-5 py-8 text-center text-sm text-white/40">
+            Loading CPU metrics…
+          </div>}
       </section>
     );
   }

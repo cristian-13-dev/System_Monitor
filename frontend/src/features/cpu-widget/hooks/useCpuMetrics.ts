@@ -11,20 +11,26 @@ async function fetchCpuData(): Promise<CpuMetrics> {
 export function useCpuMetrics() {
   const [cpu, setCpu] = useState<CpuMetrics | null>(null);
   const [history, setHistory] = useState<number[]>([]);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    const tick = () =>
-      fetchCpuData()
-        .then((data) => {
-          setHistory((prev) => [...prev, data.averageCpuUtilization].slice(-HISTORY_SIZE));
-          setCpu(data);
-        })
-        .catch(console.error);
+    const tick = async () => {
+      try {
+        const data = await fetchCpuData();
+        setError(null);
+        setHistory((prev) =>
+          [...prev, data.averageCpuUtilization].slice(-HISTORY_SIZE)
+        );
+        setCpu(data);
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error(String(err)));
+      }
+    };
 
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, []);
 
-  return {cpu, history};
+  return { cpu, history, error };
 }
