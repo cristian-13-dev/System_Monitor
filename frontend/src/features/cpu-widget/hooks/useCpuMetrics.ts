@@ -3,7 +3,7 @@ import type { CpuMetrics } from "../types.ts";
 import { HISTORY_SIZE } from "../constants.ts";
 
 async function fetchCpuData(): Promise<CpuMetrics> {
-  const url = `${import.meta.env.VITE_API_URL ?? "http://localhost:3001"}/api/cpu`;
+  const url = `${import.meta.env.VITE_API_URL}/cpu`;
 
   try {
     const res = await fetch(url);
