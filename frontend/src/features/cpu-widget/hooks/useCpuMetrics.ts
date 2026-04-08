@@ -1,11 +1,26 @@
-import {useState, useEffect} from "react";
-import type {CpuMetrics} from "../types.ts";
-import {HISTORY_SIZE} from "../constants.ts";
+import { useState, useEffect } from "react";
+import type { CpuMetrics } from "../types.ts";
+import { HISTORY_SIZE } from "../constants.ts";
 
 async function fetchCpuData(): Promise<CpuMetrics> {
-  const res = await fetch(`${import.meta.env.VITE_API_URL ?? "http://localhost:3001"}/api/cpu`);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  const url = `${import.meta.env.VITE_API_URL ?? "http://localhost:3001"}/api/cpu`;
+
+  try {
+    const res = await fetch(url);
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`CPU request failed\nURL: ${url}\nStatus: ${res.status}\nBody: ${body}`);
+    }
+
+    return await res.json();
+  } catch (err) {
+    if (err instanceof Error) {
+      throw new Error(`CPU fetch failed\nURL: ${url}\nReason: ${err.message}`);
+    }
+
+    throw new Error(`CPU fetch failed\nURL: ${url}\nReason: ${String(err)}`);
+  }
 }
 
 export function useCpuMetrics() {
