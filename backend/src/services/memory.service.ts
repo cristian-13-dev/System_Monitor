@@ -76,17 +76,6 @@ function clamp(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-function asNullableString(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim();
-  if (!normalized || normalized.toLowerCase() === 'unknown') return null;
-  return normalized;
-}
-
-function asNullableNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
-}
-
 function buildMemorySection(params: {
   totalBytes: number;
   availableBytes: number;
@@ -147,175 +136,65 @@ async function readProcMeminfo(): Promise<Record<string, number>> {
   return result;
 }
 
-function normalizeLayoutModule(module: any): MemoryLayoutModule {
-  return {
-    size: formatToGb(clamp(module?.size)),
-    bank: asNullableString(module?.bank),
-    type: asNullableString(module?.type),
-    clockSpeedMHz: asNullableNumber(module?.clockSpeed),
-    formFactor: asNullableString(module?.formFactor),
-    manufacturer: asNullableString(module?.manufacturer),
-    partNum: asNullableString(module?.partNum),
-    serialNum: asNullableString(module?.serialNum),
-    ecc: typeof module?.ecc === 'boolean' ? module.ecc : null,
-  };
-}
-
-async function getMemoryLayoutFromSystemInformation(): Promise<MemoryLayoutModule[]> {
-  try {
-    const layout = await si.memLayout();
-    return Array.isArray(layout) ? layout.map(normalizeLayoutModule) : [];
-  } catch (error) {
-    console.error('Failed to read memory layout via systeminformation:', error);
-    return [];
-  }
-}
-
-function parseDmidecodeMemory(stdout: string): MemoryLayoutModule[] {
-  const devices = stdout
-    .split(/\n\s*\n/g)
-    .filter((block) => block.includes('Memory Device'));
-
-  const parsed: MemoryLayoutModule[] = [];
-
-  for (const block of devices) {
-    const getField = (label: string): string | null => {
-      const regex = new RegExp(`^\\s*${label}:\\s*(.+)$`, 'mi');
-      const match = block.match(regex);
-      if (!match) return null;
-
-      const value = match[1].trim();
-      if (
-        !value ||
-        value === 'Unknown' ||
-        value === 'Not Provided' ||
-        value === 'Not Installed' ||
-        value === 'None'
-      ) {
-        return null;
-      }
-
-      return value;
-    };
-
-    const sizeText = getField('Size');
-    if (!sizeText || /No Module Installed/i.test(sizeText)) continue;
-
-    let sizeBytes = 0;
-    const sizeMatch = sizeText.match(/^(\d+)\s*(MB|GB|TB)$/i);
-    if (sizeMatch) {
-      const value = Number(sizeMatch[1]);
-      const unit = sizeMatch[2].toUpperCase();
-
-      if (unit === 'MB') sizeBytes = value * 1024 ** 2;
-      else if (unit === 'GB') sizeBytes = value * 1024 ** 3;
-      else if (unit === 'TB') sizeBytes = value * 1024 ** 4;
-    }
-
-    const speedText =
-      getField('Configured Memory Speed') ||
-      getField('Speed') ||
-      getField('Configured Clock Speed');
-
-    let clockSpeedMHz: number | null = null;
-    if (speedText) {
-      const speedMatch = speedText.match(/(\d+)\s*MT\/s|(\d+)\s*MHz/i);
-      const value = speedMatch?.[1] || speedMatch?.[2];
-      clockSpeedMHz = value ? Number(value) : null;
-    }
-
-    const module: MemoryLayoutModule = {
-      size: formatToGb(clamp(sizeBytes)),
-      bank: getField('Bank Locator') || getField('Locator'),
-      type: getField('Type'),
-      clockSpeedMHz,
-      formFactor: getField('Form Factor'),
-      manufacturer: getField('Manufacturer'),
-      partNum: getField('Part Number'),
-      serialNum: getField('Serial Number'),
-      ecc: (() => {
-        const totalWidth = getField('Total Width');
-        const dataWidth = getField('Data Width');
-        if (!totalWidth || !dataWidth) return null;
-
-        const totalBits = Number(totalWidth.match(/\d+/)?.[0]);
-        const dataBits = Number(dataWidth.match(/\d+/)?.[0]);
-
-        if (!Number.isFinite(totalBits) || !Number.isFinite(dataBits)) return null;
-        return totalBits > dataBits;
-      })(),
-    };
-
-    parsed.push(module);
-  }
-
-  return parsed;
-}
-
-async function getMemoryLayoutFromDmidecode(): Promise<MemoryLayoutModule[]> {
-  if (process.platform !== 'linux') return [];
-
+async function getLinuxRamMeta(): Promise<{ type: string | null; clockSpeedMHz: number | null }> {
   try {
     const { stdout } = await execFileAsync('dmidecode', ['-t', 'memory']);
-    return parseDmidecodeMemory(stdout);
-  } catch (error) {
-    return [];
+    const block = stdout.split(/\n\s*\n/).find((b) => /Memory Device/.test(b) && !/No Module Installed/i.test(b));
+    if (!block) return { type: null, clockSpeedMHz: null };
+
+    const type = block.match(/^\s*Type:\s*(.+)$/mi)?.[1]?.trim() || null;
+    const speedText =
+      block.match(/^\s*Configured Memory Speed:\s*(.+)$/mi)?.[1] ||
+      block.match(/^\s*Speed:\s*(.+)$/mi)?.[1] ||
+      null;
+
+    const clockSpeedMHz = speedText ? Number(speedText.match(/\d+/)?.[0] ?? 0) || null : null;
+    const inferredType =
+      type && type !== 'Unknown'
+        ? type
+        : clockSpeedMHz
+          ? clockSpeedMHz >= 4800 ? 'DDR5'
+            : clockSpeedMHz >= 1600 ? 'DDR4'
+              : clockSpeedMHz >= 800 ? 'DDR3'
+                : null
+          : null;
+
+    return { type: inferredType, clockSpeedMHz };
+  } catch {
+    return { type: null, clockSpeedMHz: null };
   }
-}
-
-function mergeLayouts(
-  primary: MemoryLayoutModule[],
-  fallback: MemoryLayoutModule[],
-): MemoryLayoutModule[] {
-  if (!primary.length) return fallback;
-  if (!fallback.length) return primary;
-
-  const max = Math.max(primary.length, fallback.length);
-  const merged: MemoryLayoutModule[] = [];
-
-  for (let i = 0; i < max; i += 1) {
-    const a = primary[i];
-    const b = fallback[i];
-
-    if (!a && b) {
-      merged.push(b);
-      continue;
-    }
-
-    if (a && !b) {
-      merged.push(a);
-      continue;
-    }
-
-    merged.push({
-      size: a?.size || b?.size || 0,
-      bank: a?.bank ?? b?.bank ?? null,
-      type: a?.type ?? b?.type ?? null,
-      clockSpeedMHz: a?.clockSpeedMHz ?? b?.clockSpeedMHz ?? null,
-      formFactor: a?.formFactor ?? b?.formFactor ?? null,
-      manufacturer: a?.manufacturer ?? b?.manufacturer ?? null,
-      partNum: a?.partNum ?? b?.partNum ?? null,
-      serialNum: a?.serialNum ?? b?.serialNum ?? null,
-      ecc: a?.ecc ?? b?.ecc ?? null,
-    });
-  }
-
-  return merged;
 }
 
 async function getMemoryLayout(): Promise<MemoryLayoutModule[]> {
-  const primary = await getMemoryLayoutFromSystemInformation();
+  try {
+    const layout = await si.memLayout();
 
-  const hasUsablePrimary = primary.some(
-    (module) => module.type !== null || module.clockSpeedMHz !== null,
-  );
+    const mapped = layout.map((module) => ({
+      size: formatToGb(clamp(module.size)),
+      bank: module.bank || null,
+      type: module.type || null,
+      clockSpeedMHz:
+        typeof module.clockSpeed === 'number' && module.clockSpeed > 0
+          ? module.clockSpeed
+          : null,
+      formFactor: module.formFactor || null,
+      manufacturer: module.manufacturer || null,
+      partNum: module.partNum || null,
+      serialNum: module.serialNum || null,
+      ecc: typeof module.ecc === 'boolean' ? module.ecc : null,
+    }));
 
-  if (hasUsablePrimary || process.platform !== 'linux') {
-    return primary;
+    if (process.platform === 'linux' && mapped[0] && (!mapped[0].type || !mapped[0].clockSpeedMHz)) {
+      const meta = await getLinuxRamMeta();
+      mapped[0].clockSpeedMHz ??= meta.clockSpeedMHz;
+      mapped[0].type ??= meta.type;
+    }
+
+    return mapped;
+  } catch (error) {
+    console.error('Failed to read memory layout:', error);
+    return [];
   }
-
-  const fallback = await getMemoryLayoutFromDmidecode();
-  return mergeLayouts(primary, fallback);
 }
 
 async function getLinuxMemoryMetrics(): Promise<MemoryMetrics> {
