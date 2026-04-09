@@ -292,7 +292,7 @@ export function MemoryWidget() {
           </div>
           <div className="min-w-0">
             <h2 className="truncate text-[15px] leading-none font-medium text-white/92">
-              Memory activity
+              Memory Activity
             </h2>
             <p className="mt-1 truncate text-[12px] text-white/38">
               {memoryType}

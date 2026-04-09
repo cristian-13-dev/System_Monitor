@@ -22,7 +22,7 @@ export function NetworkHeader({ bandwidthStatus }: Props) {
           <Wifi size={21} />
         </div>
         <div>
-          <div className="text-[15px] font-medium text-white/92">Network activity</div>
+          <div className="text-[15px] font-medium text-white/92">Network Activity</div>
           <div className="mt-0.5 text-xs text-white/46">
             Download, upload and latency data
           </div>
