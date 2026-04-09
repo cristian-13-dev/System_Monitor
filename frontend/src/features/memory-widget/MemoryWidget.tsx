@@ -288,7 +288,7 @@ export function MemoryWidget() {
       <div className="flex items-center justify-between gap-3 border-b border-white/6 px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/6 bg-white/[0.025]">
-            <MemoryStick className="h-[18px] w-[18px] text-white/80" strokeWidth={1.8} />
+            <MemoryStick className="h-[21px] w-[21px] text-white/80" strokeWidth={1.8} />
           </div>
           <div className="min-w-0">
             <h2 className="truncate text-[15px] leading-none font-medium text-white/92">
