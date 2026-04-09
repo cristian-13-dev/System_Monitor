@@ -19,9 +19,28 @@ export type SwapSection = {
   usagePercentage: number | null;
 };
 
+export type MemoryLayoutModule = {
+  size: number;
+  bank: string | null;
+  type: string | null;
+  clockSpeedMHz: number | null;
+  formFactor: string | null;
+  manufacturer: string | null;
+  partNum: string | null;
+  serialNum: string | null;
+  ecc: boolean | null;
+};
+
+export type MemorySummary = {
+  type: string | null;
+  frequencyMHz: number | null;
+};
+
 export type MemoryMetrics = {
   raw: MemorySection;
   swap: SwapSection;
+  layout: MemoryLayoutModule[];
+  summary: MemorySummary;
   updatedAt: string;
 };
 
@@ -40,6 +59,11 @@ let memoryMetrics: MemoryMetrics = {
     available: 0,
     used: 0,
     usagePercentage: null,
+  },
+  layout: [],
+  summary: {
+    type: null,
+    frequencyMHz: null,
   },
   updatedAt: new Date().toISOString(),
 };
@@ -84,6 +108,15 @@ function buildSwapSection(totalBytes: number, freeBytes: number): SwapSection {
   };
 }
 
+function buildMemorySummary(layout: MemoryLayoutModule[]): MemorySummary {
+  const first = layout.find((module) => module.type || module.clockSpeedMHz);
+
+  return {
+    type: first?.type ?? null,
+    frequencyMHz: first?.clockSpeedMHz ?? null,
+  };
+}
+
 async function readProcMeminfo(): Promise<Record<string, number>> {
   const content = await fs.readFile('/proc/meminfo', 'utf8');
   const result: Record<string, number> = {};
@@ -99,8 +132,35 @@ async function readProcMeminfo(): Promise<Record<string, number>> {
   return result;
 }
 
+async function getMemoryLayout(): Promise<MemoryLayoutModule[]> {
+  try {
+    const layout = await si.memLayout();
+
+    return layout.map((module) => ({
+      size: formatToGb(clamp(module.size)),
+      bank: module.bank || null,
+      type: module.type || null,
+      clockSpeedMHz:
+        typeof module.clockSpeed === 'number' && module.clockSpeed > 0
+          ? module.clockSpeed
+          : null,
+      formFactor: module.formFactor || null,
+      manufacturer: module.manufacturer || null,
+      partNum: module.partNum || null,
+      serialNum: module.serialNum || null,
+      ecc: typeof module.ecc === 'boolean' ? module.ecc : null,
+    }));
+  } catch (error) {
+    console.error('Failed to read memory layout:', error);
+    return [];
+  }
+}
+
 async function getLinuxMemoryMetrics(): Promise<MemoryMetrics> {
-  const meminfo = await readProcMeminfo();
+  const [meminfo, layout] = await Promise.all([
+    readProcMeminfo(),
+    getMemoryLayout(),
+  ]);
 
   const memTotal = clamp(meminfo.MemTotal);
   const memAvailable = clamp(meminfo.MemAvailable);
@@ -119,16 +179,19 @@ async function getLinuxMemoryMetrics(): Promise<MemoryMetrics> {
   });
 
   const swap = buildSwapSection(swapTotal, swapFree);
+  const summary = buildMemorySummary(layout);
 
   return {
     raw,
     swap,
+    layout,
+    summary,
     updatedAt: new Date().toISOString(),
   };
 }
 
 async function getFallbackMemoryMetrics(): Promise<MemoryMetrics> {
-  const mem = await si.mem();
+  const [mem, layout] = await Promise.all([si.mem(), getMemoryLayout()]);
 
   const raw = buildMemorySection({
     totalBytes: clamp(mem.total),
@@ -138,10 +201,13 @@ async function getFallbackMemoryMetrics(): Promise<MemoryMetrics> {
   });
 
   const swap = buildSwapSection(clamp(mem.swaptotal), clamp(mem.swapfree));
+  const summary = buildMemorySummary(layout);
 
   return {
     raw,
     swap,
+    layout,
+    summary,
     updatedAt: new Date().toISOString(),
   };
 }
