@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { MemoryStick, Database, ArrowLeftRight, RefreshCw } from "lucide-react";
-import {apiUrl} from "../network-widget/constants.ts";
+import { apiUrl } from "../network-widget/constants.ts";
 
 interface MemoryRaw {
   total: number;
@@ -49,10 +49,10 @@ const POLL_MS = 2_000;
 const BAR_COUNT = 12;
 
 const COLOR = {
-  good:  "#3dd886",
-  warn:  "#d8a23d",
-  hot:   "#d83d3d",
-  swap:  "#7c6ef7",
+  good: "#3dd886",
+  warn: "#d8a23d",
+  hot: "#d83d3d",
+  swap: "#7c6ef7",
   track: "rgba(255,255,255,0.06)",
 } as const;
 
@@ -78,6 +78,34 @@ function getPressureLabel(p: number): string {
   return "High";
 }
 
+function getDisplayedMemoryType(data: MemoryData): string {
+  return data.layout[0]?.type || data.summary.type || "Unknown";
+}
+
+function getDisplayedFrequencyMHz(data: MemoryData): number | null {
+  return data.layout[0]?.clockSpeedMHz || data.summary.frequencyMHz || null;
+}
+
+function getRoundedInstalledCapacityGB(data: MemoryData): number {
+  const slotTotal = data.layout.reduce((sum, slot) => sum + slot.size, 0);
+  const sourceTotal = slotTotal > 0 ? slotTotal : data.raw.total;
+
+  const commonSizes = [2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256];
+
+  let closest = commonSizes[0];
+  let minDiff = Math.abs(sourceTotal - closest);
+
+  for (const size of commonSizes) {
+    const diff = Math.abs(sourceTotal - size);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = size;
+    }
+  }
+
+  return closest;
+}
+
 function PressureCard({ pressure, accent }: { pressure: number; accent: string }) {
   const activeBars = Math.round((pressure / 100) * BAR_COUNT);
 
@@ -93,7 +121,7 @@ function PressureCard({ pressure, accent }: { pressure: number; accent: string }
         <span className="mb-1 text-[18px] leading-none text-white/48">%</span>
       </div>
       <div className="flex-1" />
-      <div className="flex gap-[5px] mt-4">
+      <div className="mt-4 flex gap-[5px]">
         {Array.from({ length: BAR_COUNT }).map((_, i) => (
           <div
             key={i}
@@ -108,9 +136,9 @@ function PressureCard({ pressure, accent }: { pressure: number; accent: string }
 
 function RamCard({ raw }: { raw: MemoryRaw }) {
   const realUsedPct = getRealUsedPct(raw);
-  const fillHeight  = Math.max(8, realUsedPct);
-  const barColor    = getRamAccent(realUsedPct);
-  const realUsedGB  = raw.total - raw.available;
+  const fillHeight = Math.max(8, realUsedPct);
+  const barColor = getRamAccent(realUsedPct);
+  const realUsedGB = raw.total - raw.available;
 
   return (
     <section className="flex flex-col rounded-xl border border-white/6 bg-white/[0.025] p-4">
@@ -118,8 +146,8 @@ function RamCard({ raw }: { raw: MemoryRaw }) {
         <Database className="h-3.5 w-3.5 text-white/55" strokeWidth={1.8} />
         <span className="text-[10px] uppercase tracking-[0.22em] text-white/42">RAM</span>
       </div>
-      <div className="mt-3 flex items-end gap-3 flex-1">
-        <div className="relative h-[100px] w-9 rounded-[14px] border border-white/6 bg-[#0b1114] overflow-hidden shrink-0">
+      <div className="mt-3 flex flex-1 items-end gap-3">
+        <div className="relative h-[100px] w-9 shrink-0 overflow-hidden rounded-[14px] border border-white/6 bg-[#0b1114]">
           <div
             className="absolute inset-x-0 bottom-0 rounded-[10px] transition-all duration-700"
             style={{ height: `${fillHeight}%`, backgroundColor: barColor }}
@@ -133,7 +161,7 @@ function RamCard({ raw }: { raw: MemoryRaw }) {
           <div className="mt-1 text-[11px] text-white/50">of {raw.total.toFixed(2)} GB</div>
         </div>
       </div>
-      <div className="mt-3 pt-2.5 border-t border-white/6">
+      <div className="mt-3 border-t border-white/6 pt-2.5">
         <div className="flex items-center justify-between text-[12px]">
           <span className="text-white/50">Available</span>
           <span className="font-medium text-white/92">{raw.available.toFixed(2)} GB</span>
@@ -148,12 +176,12 @@ function SwapBar({ swap }: { swap: MemorySwap }) {
 
   return (
     <section className="rounded-xl border border-white/6 bg-white/[0.025] px-4 py-3.5">
-      <div className="flex items-center justify-between mb-2.5 gap-2 flex-wrap">
+      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <ArrowLeftRight className="h-3.5 w-3.5 text-white/50" strokeWidth={1.8} />
           <span className="text-[10px] uppercase tracking-[0.22em] text-white/42">Swap</span>
         </div>
-        <div className="flex items-center gap-3 sm:gap-4 flex-wrap">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <div className="flex items-center gap-1.5">
             <div className="h-1.5 w-1.5 rounded-[2px]" style={{ backgroundColor: COLOR.swap }} />
             <span className="text-[12px] text-white/50">Used</span>
@@ -167,7 +195,7 @@ function SwapBar({ swap }: { swap: MemorySwap }) {
           <span className="text-[12px] text-white/28">{swap.usagePercentage}%</span>
         </div>
       </div>
-      <div className="h-2 rounded-full overflow-hidden bg-white/6">
+      <div className="h-2 overflow-hidden rounded-full bg-white/6">
         <div
           className="h-full rounded-full transition-all duration-700"
           style={{
@@ -187,15 +215,15 @@ function SwapBar({ swap }: { swap: MemorySwap }) {
 
 function Skeleton() {
   return (
-    <div className="w-full sm:w-[460px] rounded-xl border border-white/6 bg-zinc-900 overflow-hidden animate-pulse">
-      <div className="px-5 py-4 border-b border-white/6 flex items-center gap-3">
-        <div className="h-11 w-11 rounded-xl bg-white/[0.025] shrink-0" />
+    <div className="w-full overflow-hidden rounded-xl border border-white/6 bg-zinc-900 animate-pulse sm:w-[460px]">
+      <div className="flex items-center gap-3 border-b border-white/6 px-5 py-4">
+        <div className="h-11 w-11 shrink-0 rounded-xl bg-white/[0.025]" />
         <div className="flex-1">
           <div className="h-4 w-36 rounded bg-white/8" />
           <div className="mt-2 h-3 w-28 rounded bg-white/5" />
         </div>
       </div>
-      <div className="p-4 flex flex-col gap-3">
+      <div className="flex flex-col gap-3 p-4">
         <div className="grid grid-cols-[1.5fr_1fr] gap-3">
           <div className="h-[196px] rounded-xl bg-white/[0.025]" />
           <div className="h-[196px] rounded-xl bg-white/[0.025]" />
@@ -208,11 +236,11 @@ function Skeleton() {
 
 function ErrorState({ onRetry }: { onRetry: () => void }) {
   return (
-    <div className="w-full sm:w-[460px] rounded-xl border border-white/6 bg-zinc-900 text-white px-5 py-8 flex flex-col items-center gap-3">
+    <div className="flex w-full flex-col items-center gap-3 rounded-xl border border-white/6 bg-zinc-900 px-5 py-8 text-white sm:w-[460px]">
       <p className="text-sm text-white/50">Failed to load memory data</p>
       <button
         onClick={onRetry}
-        className="flex items-center gap-1.5 text-xs text-white/60 hover:text-white/90 transition-colors"
+        className="flex items-center gap-1.5 text-xs text-white/60 transition-colors hover:text-white/90"
       >
         <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.8} />
         Retry
@@ -222,7 +250,7 @@ function ErrorState({ onRetry }: { onRetry: () => void }) {
 }
 
 export function MemoryWidget() {
-  const [data, setData]   = useState<MemoryData | null>(null);
+  const [data, setData] = useState<MemoryData | null>(null);
   const [error, setError] = useState(false);
 
   const fetchData = async () => {
@@ -244,47 +272,55 @@ export function MemoryWidget() {
   }, []);
 
   if (error) return <ErrorState onRetry={fetchData} />;
-  if (!data)  return <Skeleton />;
+  if (!data) return <Skeleton />;
 
-  const { raw, swap, summary } = data;
+  const { raw, swap } = data;
   const pressure = raw.pressurePercentage;
-  const accent   = getPressureAccent(pressure);
-  const label    = getPressureLabel(pressure);
+  const accent = getPressureAccent(pressure);
+  const label = getPressureLabel(pressure);
+
+  const memoryType = getDisplayedMemoryType(data);
+  const frequencyMHz = getDisplayedFrequencyMHz(data);
+  const installedCapacityGB = getRoundedInstalledCapacityGB(data);
 
   return (
-    <div className="w-full sm:w-[460px] rounded-xl border border-white/6 bg-zinc-900 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] overflow-hidden">
-      <div className="px-5 py-4 border-b border-white/6 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="h-11 w-11 rounded-xl border border-white/6 bg-white/[0.025] flex items-center justify-center shrink-0">
+    <div className="w-full overflow-hidden rounded-xl border border-white/6 bg-zinc-900 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:w-[460px]">
+      <div className="flex items-center justify-between gap-3 border-b border-white/6 px-5 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/6 bg-white/[0.025]">
             <MemoryStick className="h-[18px] w-[18px] text-white/80" strokeWidth={1.8} />
           </div>
           <div className="min-w-0">
-            <h2 className="text-[15px] font-medium text-white/92 leading-none truncate">
+            <h2 className="truncate text-[15px] leading-none font-medium text-white/92">
               Memory activity
             </h2>
-            <p className="mt-1 text-[12px] text-white/38 truncate">
-              {summary.type} · {summary.frequencyMHz} MHz · {Math.floor(raw.total)} GB
+            <p className="mt-1 truncate text-[12px] text-white/38">
+              {memoryType}
+              {frequencyMHz ? ` · ${frequencyMHz} MHz` : ""}
+              {` · ${installedCapacityGB} GB`}
             </p>
           </div>
         </div>
+
         <div
           className="flex items-center gap-2 rounded-lg border px-3 py-1.5"
-          style={{borderColor: `${accent}28`, background: `${accent}0f`}}
+          style={{ borderColor: `${accent}28`, background: `${accent}0f` }}
         >
-      <span
-        className="h-1.5 w-1.5 rounded-full"
-        style={{
-          backgroundColor: accent,
-          boxShadow: `0 0 6px ${accent}`,
-          animation: "pulse 2.5s ease-in-out infinite"
-        }}
-      />
-          <span className="text-[12px] font-medium" style={{color: accent}}>
-        {label}
-      </span>
+          <span
+            className="h-1.5 w-1.5 rounded-full"
+            style={{
+              backgroundColor: accent,
+              boxShadow: `0 0 6px ${accent}`,
+              animation: "pulse 2.5s ease-in-out infinite",
+            }}
+          />
+          <span className="text-[12px] font-medium" style={{ color: accent }}>
+            {label}
+          </span>
         </div>
       </div>
-      <div className="p-4 flex flex-col gap-3">
+
+      <div className="flex flex-col gap-3 px-2 py-4 sm:p-4">
         <div className="grid grid-cols-[1.5fr_1fr] gap-3">
           <PressureCard pressure={pressure} accent={accent} />
           <RamCard raw={raw} />
