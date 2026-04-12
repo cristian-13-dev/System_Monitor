@@ -90,7 +90,7 @@ function getRoundedInstalledCapacityGB(data: MemoryData): number {
   const slotTotal = data.layout.reduce((sum, slot) => sum + slot.size, 0);
   const sourceTotal = slotTotal > 0 ? slotTotal : data.raw.total;
 
-  const commonSizes = [2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256];
+  const commonSizes = [2, 4, 6, 8, 12, 16, 24, 32, 36, 48, 64, 96, 128, 192, 256];
 
   let closest = commonSizes[0];
   let minDiff = Math.abs(sourceTotal - closest);
@@ -110,7 +110,7 @@ function PressureCard({pressure, accent}: { pressure: number; accent: string }) 
   const activeBars = Math.round((pressure / 100) * BAR_COUNT);
 
   return (
-    <section className="flex flex-col rounded-xl border border-white/6 bg-white/[0.025] p-4 min-h-[196px]">
+    <section className="flex flex-col rounded-xl border border-white/6 bg-white/2.5 p-4 min-h-49">
       <div className="text-[10px] uppercase tracking-[0.22em] text-white/42">
         Pressure index
       </div>
@@ -121,11 +121,11 @@ function PressureCard({pressure, accent}: { pressure: number; accent: string }) 
         <span className="mb-1 text-[18px] leading-none text-white/48">%</span>
       </div>
       <div className="flex-1"/>
-      <div className="mt-4 flex gap-[5px]">
+      <div className="mt-4 flex gap-1.25">
         {Array.from({length: BAR_COUNT}).map((_, i) => (
           <div
             key={i}
-            className="h-9 flex-1 rounded-[4px]"
+            className="h-9 flex-1 rounded-sm"
             style={{backgroundColor: i < activeBars ? accent : COLOR.track}}
           />
         ))}
@@ -141,14 +141,14 @@ function RamCard({raw}: { raw: MemoryRaw }) {
   const realUsedGB = raw.total - raw.available;
 
   return (
-    <section className="flex flex-col rounded-xl border border-white/6 bg-white/[0.025] p-4">
+    <section className="flex flex-col rounded-xl border border-white/6 bg-white/2.5 p-4">
       <div className="flex items-center gap-1.5">
         <Database className="h-3.5 w-3.5 text-white/55" strokeWidth={1.8}/>
         <span className="text-[10px] uppercase tracking-[0.22em] text-white/42">RAM</span>
       </div>
       <div className="mt-3 flex flex-1 items-end gap-3">
         <div
-          className="relative h-[100px] w-9 shrink-0 overflow-hidden rounded-[14px] border border-white/6 bg-[#0b1114]">
+          className="relative h-25 w-9 shrink-0 overflow-hidden rounded-xl border border-white/6 bg-zinc-900">
           <div
             className="absolute inset-x-0 bottom-0 rounded-[10px] transition-all duration-700"
             style={{height: `${fillHeight}%`, backgroundColor: barColor}}
@@ -176,7 +176,7 @@ function SwapBar({swap}: { swap: MemorySwap }) {
   const fillPct = Math.max(swap.usagePercentage, swap.used > 0 ? 0.5 : 0);
 
   return (
-    <section className="rounded-xl border border-white/6 bg-white/[0.025] px-4 py-3.5">
+    <section className="rounded-xl border border-white/6 bg-white/2.5 px-4 py-3.5">
       <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <ArrowLeftRight className="h-3.5 w-3.5 text-white/50" strokeWidth={1.8}/>
@@ -200,11 +200,11 @@ function SwapBar({swap}: { swap: MemorySwap }) {
           <div className="flex items-center gap-1.5">
             <span className="text-[12px] text-white/50">Used</span>
             <span className="text-[12px] font-medium text-white/88">{swap.used.toFixed(2)} GB</span>
-            <div className="h-1.5 w-1.5 rounded-[2px]" style={{backgroundColor: COLOR.swap}}/>
+            <div className="h-1.5 w-1.5 rounded-xs" style={{backgroundColor: COLOR.swap}}/>
           </div>
           <span className="text-[12px] text-white/28">|</span>
           <div className="flex items-center gap-1.5">
-            <div className="h-1.5 w-1.5 rounded-[2px] border border-white/12 bg-white/8"/>
+            <div className="h-1.5 w-1.5 rounded-xs border border-white/12 bg-white/8"/>
             <span className="text-[12px] text-white/50">Free</span>
             <span className="text-[12px] font-medium text-white/88">{swap.available.toFixed(2)} GB</span>
           </div>
@@ -217,9 +217,9 @@ function SwapBar({swap}: { swap: MemorySwap }) {
 
 function Skeleton() {
   return (
-    <div className="w-full overflow-hidden rounded-xl border border-white/6 bg-zinc-900 animate-pulse sm:w-[460px]">
+    <div className="w-full overflow-hidden rounded-xl border border-white/6 bg-zinc-900 animate-pulse sm:w-115">
       <div className="flex items-center gap-3 border-b border-white/6 px-5 py-4">
-        <div className="h-11 w-11 shrink-0 rounded-xl bg-white/[0.025]"/>
+        <div className="h-11 w-11 shrink-0 rounded-xl bg-white/2.5"/>
         <div className="flex-1">
           <div className="h-4 w-36 rounded bg-white/8"/>
           <div className="mt-2 h-3 w-28 rounded bg-white/5"/>
@@ -227,10 +227,10 @@ function Skeleton() {
       </div>
       <div className="flex flex-col gap-3 p-4">
         <div className="grid grid-cols-[1.5fr_1fr] gap-3">
-          <div className="h-[196px] rounded-xl bg-white/[0.025]"/>
-          <div className="h-[196px] rounded-xl bg-white/[0.025]"/>
+          <div className="h-49 rounded-xl bg-white/2.5"/>
+          <div className="h-49 rounded-xl bg-white/2.5"/>
         </div>
-        <div className="h-[72px] rounded-xl bg-white/[0.025]"/>
+        <div className="h-18 rounded-xl bg-white/2.5"/>
       </div>
     </div>
   );
@@ -239,7 +239,7 @@ function Skeleton() {
 function ErrorState({onRetry}: { onRetry: () => void }) {
   return (
     <div
-      className="flex w-full flex-col items-center gap-3 rounded-xl border border-white/6 bg-zinc-900 px-5 py-8 text-white sm:w-[460px]">
+      className="flex w-full flex-col items-center gap-3 rounded-xl border border-white/6 bg-zinc-900 px-5 py-8 text-white sm:w-115">
       <p className="text-sm text-white/50">Failed to load memory data</p>
       <button
         onClick={onRetry}
@@ -288,21 +288,19 @@ export function MemoryWidget() {
 
   return (
     <div
-      className="w-full overflow-hidden rounded-xl border border-white/6 bg-zinc-900 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:w-[460px]">
+      className="w-full overflow-hidden rounded-2xl border border-white/6 bg-zinc-900 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:w-115">
       <div className="flex items-center justify-between gap-3 border-b border-white/6 px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
           <div
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/6 bg-white/[0.025]">
-            <MemoryStick className="h-[21px] w-[21px] text-white/80" strokeWidth={1.8}/>
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/6 bg-white/2.5">
+            <MemoryStick className="h-5.25 w-5.25 text-white/80" strokeWidth={1.8}/>
           </div>
           <div className="min-w-0">
             <h2 className="truncate text-[15px] leading-none font-medium text-white/92">
               Memory Activity
             </h2>
             <p className="mt-1 truncate text-[12px] text-white/38">
-              {memoryType}
-              {frequencyMHz ? ` · ${frequencyMHz} MHz` : ""}
-              {` · ${installedCapacityGB} GB`}
+              {memoryType}{frequencyMHz ? ` · ${frequencyMHz} MHz` : ""}{` · ${installedCapacityGB} GB`}
             </p>
           </div>
         </div>
