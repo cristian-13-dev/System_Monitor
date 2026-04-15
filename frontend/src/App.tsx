@@ -3,6 +3,7 @@ import { NetworkWidget } from "./features/network-widget";
 import CpuWidget from "./features/cpu-widget/components/CpuWidget.tsx";
 import {MemoryWidget} from "./features/memory-widget/MemoryWidget.tsx";
 import "./App.css";
+import StorageWidget from "./features/storage-widget/StorageWidget.tsx";
 
 const App = () => {
   const [appError, setAppError] = useState<string | null>(null);
@@ -22,6 +23,7 @@ const App = () => {
           <MemoryWidget />
           <NetworkWidget />
         </div>
+          <StorageWidget/>
       </div>
     </main>
   );
