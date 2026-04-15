@@ -5,7 +5,7 @@ import { formatToGb } from '../utils/formatToGb.js'
 
 const execAsync = promisify(exec)
 
-export type CategoryMetric = {
+export type DiskCategory = {
   category: string
   value: number
 }
@@ -17,7 +17,7 @@ export type PartitionMetrics = {
   used: number
   available: number
   usePercent: number
-  categories: CategoryMetric[]
+  categories: DiskCategory[]
 }
 
 export type PhysicalDisk = {
@@ -61,7 +61,7 @@ async function getDirBytes(path: string): Promise<number> {
   }
 }
 
-async function buildCategories(mount: string, usedBytes: number): Promise<CategoryMetric[]> {
+async function buildCategories(mount: string, usedBytes: number): Promise<DiskCategory[]> {
   const defs = CATEGORY_DIRS[mount]
   if (!defs) {
     return [
@@ -72,25 +72,25 @@ async function buildCategories(mount: string, usedBytes: number): Promise<Catego
     ]
   }
 
-  const grouped = await Promise.all(
+  const resolved = await Promise.all(
     defs.map(async ({ category, paths }) => {
       const sizes = await Promise.all(paths.map(getDirBytes))
-      const totalBytes = sizes.reduce((sum, size) => sum + size, 0)
+      const bytes = sizes.reduce((sum, size) => sum + size, 0)
 
       return {
         category,
-        bytes: totalBytes,
+        bytes,
       }
     })
   )
 
-  const knownBytes = grouped.reduce((sum, item) => sum + item.bytes, 0)
+  const knownBytes = resolved.reduce((sum, item) => sum + item.bytes, 0)
   const otherBytes = Math.max(0, usedBytes - knownBytes)
 
   return [
-    ...grouped.map(item => ({
-      category: item.category,
-      value: formatToGb(item.bytes),
+    ...resolved.map(({ category, bytes }) => ({
+      category,
+      value: formatToGb(bytes),
     })),
     {
       category: 'Other',
