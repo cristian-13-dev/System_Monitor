@@ -336,7 +336,7 @@ export function MemoryWidget() {
 
   return (
     <div
-      className="w-full overflow-hidden rounded-2xl border border-white/6 bg-zinc-900 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] sm:w-115">
+      className="w-full overflow-hidden rounded-2xl border border-white/6 bg-zinc-900 text-white shadow-lg sm:w-115">
       <div className="flex items-center justify-between gap-3 border-b border-white/6 px-5 py-4">
         <div className="flex min-w-0 items-center gap-3">
           <div
