@@ -7,6 +7,7 @@ const execAsync = promisify(exec)
 
 export type DiskCategory = {
   name: string
+  category: string
   gb: number
 }
 
@@ -37,9 +38,9 @@ const EXCLUDED_FS = new Set(['tmpfs', 'efivarfs', 'devtmpfs', 'squashfs', 'overl
 
 const CATEGORY_DIRS: Record<string, { name: string; paths: string[] }[]> = {
   '/': [
-    { name: 'System',       paths: ['/usr', '/etc'] },
-    { name: 'Docker',       paths: ['/var/lib/docker'] },
-    { name: 'User',         paths: ['/home', '/root', '/opt'] },
+    { name: 'System', paths: ['/usr', '/etc'] },
+    { name: 'Docker', paths: ['/var/lib/docker'] },
+    { name: 'User', paths: ['/home', '/root', '/opt'] },
     { name: 'Logs & Cache', paths: ['/var/log', '/var/cache'] },
   ],
 }
@@ -60,7 +61,11 @@ async function buildCategories(mount: string, usedBytes: number): Promise<DiskCa
   const resolved = await Promise.all(
     defs.map(async ({ name, paths }) => {
       const sizes = await Promise.all(paths.map(getDirBytes))
-      return { name, bytes: sizes.reduce((a, b) => a + b, 0) }
+      return {
+        name,
+        category: name,
+        bytes: sizes.reduce((a, b) => a + b, 0),
+      }
     })
   )
 
@@ -68,8 +73,16 @@ async function buildCategories(mount: string, usedBytes: number): Promise<DiskCa
   const otherBytes = Math.max(0, usedBytes - sumKnown)
 
   return [
-    ...resolved.map(({ name, bytes }) => ({ name, gb: formatToGb(bytes) })),
-    { name: 'Other', gb: formatToGb(otherBytes) },
+    ...resolved.map(({ name, category, bytes }) => ({
+      name,
+      category,
+      gb: formatToGb(bytes),
+    })),
+    {
+      name: 'Other',
+      category: 'Other',
+      gb: formatToGb(otherBytes),
+    },
   ]
 }
 
