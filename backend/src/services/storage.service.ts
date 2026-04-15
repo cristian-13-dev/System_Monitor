@@ -5,10 +5,9 @@ import { formatToGb } from '../utils/formatToGb.js'
 
 const execAsync = promisify(exec)
 
-export type DiskCategory = {
-  name: string
+export type CategoryMetric = {
   category: string
-  gb: number
+  value: number
 }
 
 export type PartitionMetrics = {
@@ -18,7 +17,7 @@ export type PartitionMetrics = {
   used: number
   available: number
   usePercent: number
-  categories: DiskCategory[]
+  categories: CategoryMetric[]
 }
 
 export type PhysicalDisk = {
@@ -34,56 +33,70 @@ export type StorageMetrics = {
   updatedAt: string | null
 }
 
-const EXCLUDED_FS = new Set(['tmpfs', 'efivarfs', 'devtmpfs', 'squashfs', 'overlay'])
+const EXCLUDED_FS = new Set([
+  'tmpfs',
+  'efivarfs',
+  'devtmpfs',
+  'squashfs',
+  'overlay',
+])
 
-const CATEGORY_DIRS: Record<string, { name: string; paths: string[] }[]> = {
+const FIFTEEN_MINUTES = 15 * 60 * 1000
+
+const CATEGORY_DIRS: Record<string, { category: string; paths: string[] }[]> = {
   '/': [
-    { name: 'System', paths: ['/usr', '/etc'] },
-    { name: 'Docker', paths: ['/var/lib/docker'] },
-    { name: 'User', paths: ['/home', '/root', '/opt'] },
-    { name: 'Logs & Cache', paths: ['/var/log', '/var/cache'] },
+    { category: 'System', paths: ['/usr', '/etc'] },
+    { category: 'Docker', paths: ['/var/lib/docker'] },
+    { category: 'User', paths: ['/home', '/root', '/opt'] },
+    { category: 'Logs & Cache', paths: ['/var/log', '/var/cache'] },
   ],
 }
 
 async function getDirBytes(path: string): Promise<number> {
   try {
-    const { stdout } = await execAsync(`du -sb ${path} 2>/dev/null | cut -f1`)
+    const { stdout } = await execAsync(`du -sb "${path}" 2>/dev/null | cut -f1`)
     return parseInt(stdout.trim(), 10) || 0
   } catch {
     return 0
   }
 }
 
-async function buildCategories(mount: string, usedBytes: number): Promise<DiskCategory[]> {
+async function buildCategories(mount: string, usedBytes: number): Promise<CategoryMetric[]> {
   const defs = CATEGORY_DIRS[mount]
-  if (!defs) return []
+  if (!defs) {
+    return [
+      {
+        category: 'Other',
+        value: formatToGb(usedBytes),
+      },
+    ]
+  }
 
-  const resolved = await Promise.all(
-    defs.map(async ({ name, paths }) => {
+  const grouped = await Promise.all(
+    defs.map(async ({ category, paths }) => {
       const sizes = await Promise.all(paths.map(getDirBytes))
+      const totalBytes = sizes.reduce((sum, size) => sum + size, 0)
+
       return {
-        name,
-        category: name,
-        bytes: sizes.reduce((a, b) => a + b, 0),
+        category,
+        bytes: totalBytes,
       }
     })
   )
 
-  const sumKnown = resolved.reduce((a, b) => a + b.bytes, 0)
-  const otherBytes = Math.max(0, usedBytes - sumKnown)
+  const knownBytes = grouped.reduce((sum, item) => sum + item.bytes, 0)
+  const otherBytes = Math.max(0, usedBytes - knownBytes)
 
   return [
-    ...resolved.map(({ name, category, bytes }) => ({
-      name,
-      category,
-      gb: formatToGb(bytes),
+    ...grouped.map(item => ({
+      category: item.category,
+      value: formatToGb(item.bytes),
     })),
     {
-      name: 'Other',
       category: 'Other',
-      gb: formatToGb(otherBytes),
+      value: formatToGb(otherBytes),
     },
-  ]
+  ].filter(item => item.value > 0)
 }
 
 let storageMetrics: StorageMetrics = {
@@ -135,7 +148,7 @@ export async function startStorageMetricsPolling() {
 
   setInterval(() => {
     void refreshStorageMetrics()
-  }, 15 * 60 * 1000)
+  }, FIFTEEN_MINUTES)
 }
 
 export function getStorageMetrics(): StorageMetrics {
