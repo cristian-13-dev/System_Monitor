@@ -1,20 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiUrl } from '../network-widget/constants.ts'
 
-type DiskCategory = {
-  category: string
-  value: number
-}
-
-type PhysicalDisk = {
-  model: string
-  type: string
-  interfaceType: string
-  size: number
-}
-
+type DiskCategory = { category: string; value: number }
+type PhysicalDisk  = { model: string; type: string; size: number }
 type PartitionMetrics = {
   mount: string
+  label: string
   fsType: string
   total: number
   used: number
@@ -22,7 +13,6 @@ type PartitionMetrics = {
   usePercent: number
   categories: DiskCategory[]
 }
-
 type StorageMetrics = {
   disks: PhysicalDisk[]
   partitions: PartitionMetrics[]
@@ -37,76 +27,63 @@ const CATEGORY_COLORS: Record<string, string> = {
   User:           '#4ade80',
   'Logs & Cache': '#f59e0b',
   Other:          '#a78bfa',
+  Used:           '#64748b',
   Free:           '#1e293b',
 }
 
-function getCategoryColor(category: string): string {
+function getColor(category: string) {
   return CATEGORY_COLORS[category] ?? '#475569'
 }
 
-function formatGb(value: number) {
-  return `${value.toFixed(1)} GB`
+function formatGb(v: number) {
+  return `${v.toFixed(1)} GB`
 }
 
-function PartitionBar({ partition }: { partition: PartitionMetrics }) {
+function PartitionRow({ partition }: { partition: PartitionMetrics }) {
   const sorted = useMemo(() => {
-    const nonFree = [...(partition.categories ?? [])].filter(c => c.category !== 'Free')
-    nonFree.sort((a, b) => b.value - a.value)
-    return nonFree
+    return [...partition.categories]
+      .filter(c => c.category !== 'Free')
+      .sort((a, b) => b.value - a.value)
   }, [partition.categories])
 
-  const freePercent = partition.total > 0
-    ? (partition.available / partition.total) * 100
-    : 0
-
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <span className="text-sm font-semibold text-slate-100">{partition.mount}</span>
-          <span className="ml-2 text-xs text-slate-500">{partition.fsType}</span>
-        </div>
-        <div className="text-right">
-          <span className="text-base font-bold text-slate-50">{formatGb(partition.used)}</span>
-          <span className="text-xs text-slate-500"> / {formatGb(partition.total)}</span>
-        </div>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between text-xs text-slate-400">
+        <span className="font-medium text-slate-200">{partition.label}</span>
+        <span>{formatGb(partition.used)} / {formatGb(partition.total)}</span>
       </div>
 
-      <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+      <div className="flex h-4 w-full overflow-hidden rounded-lg" style={{ gap: '2px' }}>
         {sorted.map(cat => (
           <div
             key={cat.category}
             style={{
               width: `${cat.value}%`,
-              backgroundColor: getCategoryColor(cat.category),
+              backgroundColor: getColor(cat.category),
+              borderRadius: '3px',
               transition: 'width 0.6s ease',
             }}
           />
         ))}
         <div
           style={{
-            width: `${freePercent}%`,
-            backgroundColor: getCategoryColor('Free'),
+            flex: 1,
+            backgroundColor: getColor('Free'),
+            borderRadius: '3px',
           }}
         />
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+      <div className="flex flex-wrap gap-x-3 gap-y-1.5">
         {sorted.map(cat => (
           <div key={cat.category} className="flex items-center gap-1.5">
-            <span
-              className="h-2 w-2 rounded-full flex-shrink-0"
-              style={{ backgroundColor: getCategoryColor(cat.category) }}
-            />
+            <span className="h-2 w-2 rounded-sm flex-shrink-0" style={{ backgroundColor: getColor(cat.category) }} />
             <span className="text-xs text-slate-400">{cat.category}</span>
             <span className="text-xs font-medium text-slate-200">{cat.value.toFixed(1)}%</span>
           </div>
         ))}
         <div className="flex items-center gap-1.5">
-          <span
-            className="h-2 w-2 rounded-full flex-shrink-0 border border-slate-600"
-            style={{ backgroundColor: getCategoryColor('Free') }}
-          />
+          <span className="h-2 w-2 rounded-sm flex-shrink-0 border border-slate-700" style={{ backgroundColor: getColor('Free') }} />
           <span className="text-xs text-slate-400">Free</span>
           <span className="text-xs font-medium text-slate-200">{formatGb(partition.available)}</span>
         </div>
@@ -116,47 +93,50 @@ function PartitionBar({ partition }: { partition: PartitionMetrics }) {
 }
 
 export default function StorageWidget() {
-  const [data, setData] = useState<StorageMetrics | null>(null)
+  const [data, setData]       = useState<StorageMetrics | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError]     = useState<string | null>(null)
 
   useEffect(() => {
-    let isMounted = true
+    let mounted = true
 
-    const fetchStorage = async () => {
+    const fetch_ = async () => {
       try {
         setError(null)
-        const response = await fetch(`${apiUrl}/storage`)
-        if (!response.ok) throw new Error(`Failed to fetch storage: ${response.status}`)
-        const result: StorageMetrics = await response.json()
-        if (isMounted) setData(result)
-      } catch (err) {
-        if (isMounted) setError(err instanceof Error ? err.message : 'Unknown error')
+        const res = await fetch(`${apiUrl}/storage`)
+        if (!res.ok) throw new Error(`${res.status}`)
+        const json: StorageMetrics = await res.json()
+        if (mounted) setData(json)
+      } catch (e) {
+        if (mounted) setError(e instanceof Error ? e.message : 'Unknown error')
       } finally {
-        if (isMounted) setLoading(false)
+        if (mounted) setLoading(false)
       }
     }
 
-    void fetchStorage()
-    const interval = setInterval(() => void fetchStorage(), FIFTEEN_MINUTES)
-    return () => { isMounted = false; clearInterval(interval) }
+    void fetch_()
+    const id = setInterval(() => void fetch_(), FIFTEEN_MINUTES)
+    return () => { mounted = false; clearInterval(id) }
   }, [])
 
-  const totalDiskSize = useMemo(() =>
-      data?.disks.reduce((sum, d) => sum + d.size, 0) ?? 0
-    , [data])
+  const totalSize = useMemo(
+    () => data?.disks.reduce((s, d) => s + d.size, 0) ?? 0,
+    [data]
+  )
+
+  const disk = data?.disks[0]
 
   if (loading) return (
     <div className="w-full rounded-2xl border border-slate-800 bg-slate-950 p-4 text-slate-50 shadow-lg">
-      <div className="text-lg font-semibold">Storage</div>
-      <div className="mt-1 text-sm text-slate-400">Loading...</div>
+      <p className="text-lg font-semibold">Storage</p>
+      <p className="mt-1 text-sm text-slate-400">Loading...</p>
     </div>
   )
 
   if (error) return (
     <div className="w-full rounded-2xl border border-slate-800 bg-slate-950 p-4 text-slate-50 shadow-lg">
-      <div className="text-lg font-semibold">Storage</div>
-      <div className="mt-1 text-sm text-red-400">{error}</div>
+      <p className="text-lg font-semibold">Storage</p>
+      <p className="mt-1 text-sm text-red-400">{error}</p>
     </div>
   )
 
@@ -166,35 +146,21 @@ export default function StorageWidget() {
     <div className="w-full rounded-2xl border border-slate-800 bg-slate-950 p-4 text-slate-50 shadow-lg">
       <div className="flex items-start justify-between">
         <div>
-          <div className="text-lg font-semibold">Storage</div>
-          <div className="mt-0.5 text-sm text-slate-400">
-            {data.disks.length} disk{data.disks.length !== 1 ? 's' : ''} • {formatGb(totalDiskSize)}
-          </div>
+          <p className="text-lg font-semibold">Storage</p>
+          {disk && (
+            <p className="mt-0.5 text-sm text-slate-400">
+              {disk.model} • {disk.type} • {formatGb(totalSize)}
+            </p>
+          )}
         </div>
-        <div className="text-xs text-slate-500">
+        <p className="text-xs text-slate-500">
           {data.updatedAt ? new Date(data.updatedAt).toLocaleTimeString() : '—'}
-        </div>
+        </p>
       </div>
 
-      {data.disks.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {data.disks.map((disk, i) => (
-            <div
-              key={`${disk.model}-${i}`}
-              className="rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-1.5"
-            >
-              <span className="text-xs font-medium text-slate-200">{disk.model}</span>
-              <span className="ml-2 text-xs text-slate-500">
-                {disk.type} • {disk.interfaceType} • {formatGb(disk.size)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-4 flex flex-col gap-3">
-        {data.partitions.map(partition => (
-          <PartitionBar key={partition.mount} partition={partition} />
+      <div className="mt-4 flex flex-col gap-5">
+        {data.partitions.map(p => (
+          <PartitionRow key={p.mount} partition={p} />
         ))}
       </div>
     </div>
