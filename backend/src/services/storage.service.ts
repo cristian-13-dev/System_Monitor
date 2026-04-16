@@ -45,9 +45,9 @@ const FIFTEEN_MINUTES = 15 * 60 * 1000
 
 const CATEGORY_DIRS: Record<string, { category: string; paths: string[] }[]> = {
   '/': [
-    { category: 'System', paths: ['/usr', '/etc'] },
-    { category: 'Docker', paths: ['/var/lib/docker'] },
-    { category: 'User', paths: ['/home', '/root', '/opt'] },
+    { category: 'System',       paths: ['/usr', '/etc'] },
+    { category: 'Docker',       paths: ['/var/lib/docker'] },
+    { category: 'User',         paths: ['/home', '/root', '/opt'] },
     { category: 'Logs & Cache', paths: ['/var/log', '/var/cache'] },
   ],
 }
@@ -61,26 +61,27 @@ async function getDirBytes(path: string): Promise<number> {
   }
 }
 
-async function buildCategories(mount: string, usedBytes: number): Promise<DiskCategory[]> {
+async function buildCategories(
+  mount: string,
+  usedBytes: number,
+  totalBytes: number,
+  availableBytes: number,
+): Promise<DiskCategory[]> {
+  const toPercent = (bytes: number) =>
+    totalBytes > 0 ? Math.round((bytes / totalBytes) * 1000) / 10 : 0
+
   const defs = CATEGORY_DIRS[mount]
   if (!defs) {
     return [
-      {
-        category: 'Other',
-        value: formatToGb(usedBytes),
-      },
+      { category: 'Used', value: toPercent(usedBytes) },
+      { category: 'Free', value: toPercent(availableBytes) },
     ]
   }
 
   const resolved = await Promise.all(
     defs.map(async ({ category, paths }) => {
       const sizes = await Promise.all(paths.map(getDirBytes))
-      const bytes = sizes.reduce((sum, size) => sum + size, 0)
-
-      return {
-        category,
-        bytes,
-      }
+      return { category, bytes: sizes.reduce((sum, s) => sum + s, 0) }
     })
   )
 
@@ -88,14 +89,9 @@ async function buildCategories(mount: string, usedBytes: number): Promise<DiskCa
   const otherBytes = Math.max(0, usedBytes - knownBytes)
 
   return [
-    ...resolved.map(({ category, bytes }) => ({
-      category,
-      value: formatToGb(bytes),
-    })),
-    {
-      category: 'Other',
-      value: formatToGb(otherBytes),
-    },
+    ...resolved.map(({ category, bytes }) => ({ category, value: toPercent(bytes) })),
+    { category: 'Other', value: toPercent(otherBytes) },
+    { category: 'Free',  value: toPercent(availableBytes) },
   ].filter(item => item.value > 0)
 }
 
@@ -129,7 +125,7 @@ async function refreshStorageMetrics() {
           used: formatToGb(p.used),
           available: formatToGb(p.available),
           usePercent: p.use,
-          categories: await buildCategories(p.mount, p.used),
+          categories: await buildCategories(p.mount, p.used, p.size, p.available),
         }))
     )
 
