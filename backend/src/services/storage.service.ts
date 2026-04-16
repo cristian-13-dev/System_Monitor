@@ -1,7 +1,7 @@
 import si from 'systeminformation'
-import { exec } from 'child_process'
-import { promisify } from 'util'
-import { formatToGb } from '../utils/formatToGb.js'
+import {exec} from 'child_process'
+import {promisify} from 'util'
+import {formatToGb} from '../utils/formatToGb.js'
 
 const execAsync = promisify(exec)
 
@@ -45,16 +45,16 @@ const FIFTEEN_MINUTES = 15 * 60 * 1000
 
 const CATEGORY_DIRS: Record<string, { category: string; paths: string[] }[]> = {
   '/': [
-    { category: 'System',       paths: ['/usr', '/etc'] },
-    { category: 'Docker',       paths: ['/var/lib/docker'] },
-    { category: 'User',         paths: ['/home', '/root', '/opt'] },
-    { category: 'Logs & Cache', paths: ['/var/log', '/var/cache'] },
+    {category: 'System', paths: ['/usr', '/etc']},
+    {category: 'Docker', paths: ['/var/lib/docker']},
+    {category: 'User', paths: ['/home', '/root', '/opt']},
+    {category: 'Logs & Cache', paths: ['/var/log', '/var/cache']},
   ],
 }
 
 async function getDirBytes(path: string): Promise<number> {
   try {
-    const { stdout } = await execAsync(`du -sb "${path}" 2>/dev/null | cut -f1`)
+    const {stdout} = await execAsync(`du -sb "${path}" 2>/dev/null | cut -f1`)
     return parseInt(stdout.trim(), 10) || 0
   } catch {
     return 0
@@ -73,15 +73,15 @@ async function buildCategories(
   const defs = CATEGORY_DIRS[mount]
   if (!defs) {
     return [
-      { category: 'Used', value: toPercent(usedBytes) },
-      { category: 'Free', value: toPercent(availableBytes) },
+      {category: 'Used', value: toPercent(usedBytes)},
+      {category: 'Free', value: toPercent(availableBytes)},
     ]
   }
 
   const resolved = await Promise.all(
-    defs.map(async ({ category, paths }) => {
+    defs.map(async ({category, paths}) => {
       const sizes = await Promise.all(paths.map(getDirBytes))
-      return { category, bytes: sizes.reduce((sum, s) => sum + s, 0) }
+      return {category, bytes: sizes.reduce((sum, s) => sum + s, 0)}
     })
   )
 
@@ -89,9 +89,9 @@ async function buildCategories(
   const otherBytes = Math.max(0, usedBytes - knownBytes)
 
   return [
-    ...resolved.map(({ category, bytes }) => ({ category, value: toPercent(bytes) })),
-    { category: 'Other', value: toPercent(otherBytes) },
-    { category: 'Free',  value: toPercent(availableBytes) },
+    ...resolved.map(({category, bytes}) => ({category, value: toPercent(bytes)})),
+    {category: 'Other', value: toPercent(otherBytes)},
+    {category: 'Free', value: toPercent(availableBytes)},
   ].filter(item => item.value > 0)
 }
 
@@ -117,7 +117,8 @@ async function refreshStorageMetrics() {
 
     const partitions: PartitionMetrics[] = await Promise.all(
       fsSizes
-        .filter(p => !EXCLUDED_FS.has(p.type) && p.mount)
+        .filter(p => !EXCLUDED_FS.has(p.type) && p.mount &&
+          (p.fs.startsWith('/dev/') || p.fs.startsWith('//')))
         .map(async p => ({
           mount: p.mount,
           fsType: p.type,
