@@ -1,7 +1,7 @@
 import si from 'systeminformation'
-import {exec} from 'child_process'
-import {promisify} from 'util'
-import {formatToGb} from '../utils/formatToGb.js'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+import { formatToGb } from '../utils/formatToGb.js'
 
 const execAsync = promisify(exec)
 
@@ -12,6 +12,7 @@ export type DiskCategory = {
 
 export type PartitionMetrics = {
   mount: string
+  label: string
   fsType: string
   total: number
   used: number
@@ -23,7 +24,6 @@ export type PartitionMetrics = {
 export type PhysicalDisk = {
   model: string
   type: string
-  interfaceType: string
   size: number
 }
 
@@ -34,27 +34,36 @@ export type StorageMetrics = {
 }
 
 const EXCLUDED_FS = new Set([
-  'tmpfs',
-  'efivarfs',
-  'devtmpfs',
-  'squashfs',
-  'overlay',
+  'tmpfs', 'efivarfs', 'devtmpfs', 'squashfs', 'overlay',
 ])
 
-const FIFTEEN_MINUTES = 15 * 60 * 1000
+const MOUNT_LABELS: Record<string, string> = {
+  '/':         'System Drive',
+  '/boot':     'Boot',
+  '/boot/efi': 'EFI',
+  '/home':     'Home',
+  '/data':     'Data',
+}
 
 const CATEGORY_DIRS: Record<string, { category: string; paths: string[] }[]> = {
   '/': [
-    {category: 'System', paths: ['/usr', '/etc']},
-    {category: 'Docker', paths: ['/var/lib/docker']},
-    {category: 'User', paths: ['/home', '/root', '/opt']},
-    {category: 'Logs & Cache', paths: ['/var/log', '/var/cache']},
+    { category: 'System',       paths: ['/usr', '/etc'] },
+    { category: 'Docker',       paths: ['/var/lib/docker'] },
+    { category: 'User',         paths: ['/home', '/root', '/opt'] },
+    { category: 'Logs & Cache', paths: ['/var/log', '/var/cache'] },
   ],
+}
+
+const FIFTEEN_MINUTES = 15 * 60 * 1000
+
+function isRealMount(mount: string): boolean {
+  const last = mount.split('/').pop() ?? ''
+  return !last.includes('.')
 }
 
 async function getDirBytes(path: string): Promise<number> {
   try {
-    const {stdout} = await execAsync(`du -sb "${path}" 2>/dev/null | cut -f1`)
+    const { stdout } = await execAsync(`du -sb "${path}" 2>/dev/null | cut -f1`)
     return parseInt(stdout.trim(), 10) || 0
   } catch {
     return 0
@@ -73,15 +82,15 @@ async function buildCategories(
   const defs = CATEGORY_DIRS[mount]
   if (!defs) {
     return [
-      {category: 'Used', value: toPercent(usedBytes)},
-      {category: 'Free', value: toPercent(availableBytes)},
-    ]
+      { category: 'Used', value: toPercent(usedBytes) },
+      { category: 'Free', value: toPercent(availableBytes) },
+    ].filter(c => c.value > 0)
   }
 
   const resolved = await Promise.all(
-    defs.map(async ({category, paths}) => {
+    defs.map(async ({ category, paths }) => {
       const sizes = await Promise.all(paths.map(getDirBytes))
-      return {category, bytes: sizes.reduce((sum, s) => sum + s, 0)}
+      return { category, bytes: sizes.reduce((sum, s) => sum + s, 0) }
     })
   )
 
@@ -89,10 +98,10 @@ async function buildCategories(
   const otherBytes = Math.max(0, usedBytes - knownBytes)
 
   return [
-    ...resolved.map(({category, bytes}) => ({category, value: toPercent(bytes)})),
-    {category: 'Other', value: toPercent(otherBytes)},
-    {category: 'Free', value: toPercent(availableBytes)},
-  ].filter(item => item.value > 0)
+    ...resolved.map(({ category, bytes }) => ({ category, value: toPercent(bytes) })),
+    { category: 'Other', value: toPercent(otherBytes) },
+    { category: 'Free',  value: toPercent(availableBytes) },
+  ].filter(c => c.value > 0)
 }
 
 let storageMetrics: StorageMetrics = {
@@ -103,24 +112,30 @@ let storageMetrics: StorageMetrics = {
 
 async function refreshStorageMetrics() {
   try {
-    const [diskLayout, fsSizes] = await Promise.all([
-      si.diskLayout(),
+    const [blockDevices, fsSizes] = await Promise.all([
+      si.blockDevices(),
       si.fsSize(),
     ])
 
-    const disks: PhysicalDisk[] = diskLayout.map(d => ({
-      model: d.name,
-      type: d.type,
-      interfaceType: d.interfaceType,
-      size: formatToGb(d.size),
-    }))
+    const disks: PhysicalDisk[] = blockDevices
+      .filter(d => d.type === 'disk')
+      .map(d => ({
+        model: d.model || d.name,
+        type: d.physical || 'SSD',
+        size: formatToGb(d.size),
+      }))
 
     const partitions: PartitionMetrics[] = await Promise.all(
       fsSizes
-        .filter(p => !EXCLUDED_FS.has(p.type) && p.mount &&
-          (p.fs.startsWith('/dev/') || p.fs.startsWith('//')))
+        .filter(p =>
+          !EXCLUDED_FS.has(p.type) &&
+          p.mount &&
+          p.fs.startsWith('/dev/') &&
+          isRealMount(p.mount)
+        )
         .map(async p => ({
           mount: p.mount,
+          label: MOUNT_LABELS[p.mount] ?? p.mount,
           fsType: p.type,
           total: formatToGb(p.size),
           used: formatToGb(p.used),
@@ -130,11 +145,7 @@ async function refreshStorageMetrics() {
         }))
     )
 
-    storageMetrics = {
-      disks,
-      partitions,
-      updatedAt: new Date().toISOString(),
-    }
+    storageMetrics = { disks, partitions, updatedAt: new Date().toISOString() }
   } catch (error) {
     console.error('Failed to refresh storage metrics', error)
   }
@@ -142,10 +153,7 @@ async function refreshStorageMetrics() {
 
 export async function startStorageMetricsPolling() {
   await refreshStorageMetrics()
-
-  setInterval(() => {
-    void refreshStorageMetrics()
-  }, FIFTEEN_MINUTES)
+  setInterval(() => void refreshStorageMetrics(), FIFTEEN_MINUTES)
 }
 
 export function getStorageMetrics(): StorageMetrics {
