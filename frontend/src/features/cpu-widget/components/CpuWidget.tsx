@@ -48,18 +48,18 @@ export default function CpuWidget({ onError }: CpuWidgetProps) {
     );
   }
 
-  const loadTone = getTone(cpu.averageCpuUtilization);
+  const color = getTone(cpu.averageCpuUtilization);
 
   return (
     <section className="w-full max-w-130">
       <div className="overflow-hidden rounded-[18px] border border-white/6 bg-zinc-900 shadow-lg">
-        <CpuHeader cpu={cpu} loadTone={loadTone} />
+        <CpuHeader cpu={cpu} color={color} />
 
         <div className="px-2 sm:px-4 pb-2 sm:pb-5 pt-4">
           <Metrics cpu={cpu} />
 
           <div className="rounded-xl border border-white/6 px-4 pb-4 pt-4 bg-white/2.5">
-            <CpuGuage cpu={cpu} loadTone={loadTone} />
+            <CpuGuage cpu={cpu} loadTone={color} />
             <CpuHistoryBar history={history} />
 
             <div className="my-4 border-t border-white/6">
