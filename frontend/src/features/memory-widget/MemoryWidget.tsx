@@ -1,6 +1,7 @@
 import {useEffect, useState} from "react";
 import {MemoryStick, Database, ArrowLeftRight, RefreshCw, ArrowDownToLine} from "lucide-react";
 import {apiUrl} from "../network-widget/constants.ts";
+import {WidgetHeader} from "../../common-ui/WidgetHeader/WidgetHeader.tsx";
 
 interface MemoryRaw {
   total: number;
@@ -107,7 +108,7 @@ function getRoundedInstalledCapacityGB(data: MemoryData): number {
   return closest;
 }
 
-function PressureCard({pressure, accent}: { pressure: number; accent: string }) {
+function PressureCard({pressure, color}: { pressure: number; color: string }) {
   const activeBars = Math.round((pressure / 100) * BAR_COUNT);
 
   return (
@@ -127,7 +128,7 @@ function PressureCard({pressure, accent}: { pressure: number; accent: string }) 
           <div
             key={i}
             className="h-9 flex-1 rounded-sm"
-            style={{backgroundColor: i < activeBars ? accent : COLOR.track}}
+            style={{backgroundColor: i < activeBars ? color : COLOR.track}}
           />
         ))}
       </div>
@@ -327,53 +328,25 @@ export function MemoryWidget() {
 
   const {raw, swap} = data;
   const pressure = raw.pressurePercentage;
-  const accent = getPressureAccent(pressure);
-  const label = getPressureLabel(pressure);
+  const color = getPressureAccent(pressure);
+  const status = getPressureLabel(pressure);
 
   const memoryType = getDisplayedMemoryType(data);
   const frequencyMHz = getDisplayedFrequencyMHz(data);
   const installedCapacityGB = getRoundedInstalledCapacityGB(data);
 
   return (
-    <div
-      className="w-full overflow-hidden rounded-2xl border border-white/6 bg-zinc-900 text-white shadow-lg sm:w-115">
-      <div className="flex items-center justify-between gap-3 border-b border-white/6 px-5 py-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <div
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/6 bg-white/2.5">
-            <MemoryStick className="h-5.25 w-5.25 text-white/80" strokeWidth={1.8}/>
-          </div>
-          <div className="min-w-0">
-            <h2 className="truncate text-[15px] leading-none font-medium text-white/92">
-              Memory Activity
-            </h2>
-            <p className="mt-1 truncate text-[12px] text-white/38">
-              {memoryType}{frequencyMHz ? ` · ${frequencyMHz} MHz` : ""}{` · ${installedCapacityGB} GB`}
-            </p>
-          </div>
-        </div>
-
-        <div
-          className="flex items-center gap-2 rounded-lg border px-3 py-1.5"
-          style={{borderColor: `${accent}28`, background: `${accent}0f`}}
-        >
-          <span
-            className="h-1.5 w-1.5 rounded-full"
-            style={{
-              backgroundColor: accent,
-              boxShadow: `0 0 6px ${accent}`,
-              animation: "pulse 2.5s ease-in-out infinite",
-            }}
-          />
-          <span className="text-[12px] font-medium" style={{color: accent}}>
-            {label}
-          </span>
-        </div>
-      </div>
+    <div className="w-full overflow-hidden rounded-2xl border border-white/6 bg-zinc-900 text-white shadow-lg sm:w-115">
+      <WidgetHeader
+        icon={MemoryStick}
+        title="Memory Activity"
+        label={`${memoryType} ${frequencyMHz ? ` · ${frequencyMHz} MHz` : ""} ${installedCapacityGB} GB`}
+        status={status}
+        color={color}/>
 
       <div className="flex flex-col gap-3 px-2 py-2 sm:p-4">
         <div className="grid grid-cols-[1.5fr_1fr] gap-3">
-          <PressureCard pressure={pressure} accent={accent}/>
+          <PressureCard pressure={pressure} color={color}/>
           <RamCard raw={raw}/>
         </div>
         <SwapBar swap={swap}/>
