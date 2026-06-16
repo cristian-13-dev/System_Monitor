@@ -1,6 +1,5 @@
 import {LEGEND} from "../../constants.ts";
 
-
 export const Header = () => {
   return (
     <div className="mb-2.5 flex items-center justify-between">

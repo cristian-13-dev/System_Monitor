@@ -3,7 +3,7 @@ export const COLOR = {
   warn: "#d8a23d",
   hot: "#d83d3d",
   track: "rgba(255,255,255,0.06)",
-};
+} as const;
 
 export const GAUGE_STYLE = {
   width: "124%",
