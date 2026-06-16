@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NetworkWidget } from "./features/network-widget";
-import CpuWidget from "./features/cpu-widget/components/CpuWidget.tsx";
+import CpuWidget from "./features/cpu-widget/components/CpuWidget/CpuWidget.tsx";
 import {MemoryWidget} from "./features/memory-widget/MemoryWidget.tsx";
 import "./App.css";
 import StorageWidget from "./features/storage-widget/StorageWidget.tsx";
