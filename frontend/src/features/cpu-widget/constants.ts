@@ -3,7 +3,23 @@ export const COLOR = {
   warn: "#d8a23d",
   hot: "#d83d3d",
   track: "rgba(255,255,255,0.06)",
-} as const;
+};
+
+export const GAUGE_STYLE = {
+  width: "124%",
+  height: 250,
+  transform: "translate(-50%, -50%)",
+};
+
+export const NUMBER_STYLE = {
+  fontVariantNumeric: "tabular-nums",
+};
+
+export const LEGEND = [
+  {label: "Normal", color: COLOR.good},
+  {label: "Medium", color: COLOR.warn},
+  {label: "High", color: COLOR.hot},
+];
 
 export const LOAD_WARN = 75;
 export const LOAD_HOT = 85;

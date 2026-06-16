@@ -4,7 +4,7 @@ import {BadgeStatus} from "./BadgeStatus";
 
 export interface HeaderWidgetBadgeProps {
   status: string;
-  color?: string;
+  color: string;
 }
 
 export const HeaderWidgetBadge = ({status, color}: HeaderWidgetBadgeProps) => {
