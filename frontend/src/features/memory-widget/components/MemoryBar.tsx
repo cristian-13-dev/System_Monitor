@@ -23,8 +23,13 @@ export const MemoryUsageBar = ({
                                  freeValue,
                                  total,
                                }: MemoryUsageBarProps) => {
-  const fillPct = Math.max(percentage, usedValue > 0 ? 0.5 : 0);
+
   const safePercentage = percentage ?? 0;
+
+  const fillPct = Math.min(
+    Math.max(safePercentage, usedValue > 0 ? 0.5 : 0),
+    100
+  );
 
 
   return (

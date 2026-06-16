@@ -8,8 +8,8 @@ interface CachedMemoryBarProps {
 }
 
 export const CachedMemoryBar = ({raw}: CachedMemoryBarProps) => {
-  const {cached, total, free} = raw;
-  const cachedPct = (cached / total) * 100;
+  const {cached, free, available} = raw;
+  const cachedPct = (cached / available) * 100;
 
   return (
     <MemoryUsageBar
@@ -21,7 +21,7 @@ export const CachedMemoryBar = ({raw}: CachedMemoryBarProps) => {
       usedValue={cached}
       freeLabel="Free"
       freeValue={free}
-      total={total}
+      total={available}
     />
   );
 };
